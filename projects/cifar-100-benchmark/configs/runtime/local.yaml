@@ -1,0 +1,4 @@
+runtime:
+  device: cuda
+  output_dir: artifacts
+  seed: 0

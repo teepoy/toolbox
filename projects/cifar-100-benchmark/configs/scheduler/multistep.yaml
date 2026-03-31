@@ -1,0 +1,4 @@
+scheduler:
+  name: multistep
+  milestones: [30, 60]
+  gamma: 0.1

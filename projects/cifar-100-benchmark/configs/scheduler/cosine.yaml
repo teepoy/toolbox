@@ -1,0 +1,4 @@
+scheduler:
+  name: cosine
+  milestones: [30, 60]
+  gamma: 0.1

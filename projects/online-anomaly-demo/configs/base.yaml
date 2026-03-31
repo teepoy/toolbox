@@ -1,0 +1,47 @@
+seed: 42
+
+paths:
+  artifacts_dir: artifacts
+  cache_parquet: artifacts/cache/embeddings.parquet
+  plots_dir: artifacts/plots
+
+data:
+  hf_dataset: nkirschi/oxford-flowers
+  known_class_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+  new_class_ids: [20, 21, 22, 23, 24]
+  prompt_template: "A close-up photo of a {class_name} flower."
+
+embedding:
+  model_name: openai/clip-vit-base-patch32
+  batch_size: 64
+  device: auto
+  force_recompute: false
+
+stream:
+  batch_size: 64
+  t0_steps: 40
+  t1_steps: 40
+  t2_steps: 40
+  t1_noise_std: 0.01
+  t1_major_class_id: 0
+  t1_major_class_ratio: 0.8
+  t2_new_class_ratio: 0.3
+  t2_mismatch_ratio: 0.3
+
+detection:
+  text_image_threshold: 0.18
+  memory_threshold: 0.30
+  top_k: 1
+
+clustering:
+  trigger_size: 200
+  min_cluster_size: 20
+  min_samples: 5
+  representatives_per_cluster: 3
+
+visualization:
+  reducer: umap
+  umap_n_neighbors: 25
+  umap_min_dist: 0.1
+  tsne_perplexity: 30
+  figure_dpi: 160

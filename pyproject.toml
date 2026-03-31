@@ -1,0 +1,21 @@
+[project]
+name = "toolbox"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "datasets>=4.8.4",
+    "fiftyone>=1.13.5",
+    "ipykernel>=7.2.0",
+    "jupyter",
+    "pillow>=12.1.1",
+]
+
+[tool.uv.workspace]
+members = [
+    "projects/online-anomaly-demo",
+]

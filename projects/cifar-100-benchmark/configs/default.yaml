@@ -1,0 +1,67 @@
+data_config: cifar100
+model_config: convnextv2_atto
+loss_config: ce
+optim_config: adamw
+scheduler_config: cosine
+pretrain_config: byol
+runtime_config: local
+
+data:
+  dataset_name: cifar100
+  label_key: fine_label
+  image_size: 64
+  batch_size: 64
+  eval_batch_size: 128
+  num_workers: 4
+  val_per_class: 50
+
+model:
+  num_classes: 100
+  backbone:
+    name: convnextv2_atto
+    model_name: convnextv2_atto
+    pretrained: true
+    num_classes: 100
+  head:
+    name: linear
+    attn_dim: 256
+    num_views: 2
+    num_heads: 4
+    num_layers: 2
+
+loss:
+  name: cross_entropy
+
+optim:
+  name: adamw
+  lr: 3e-4
+  weight_decay: 0.05
+  momentum: 0.9
+
+scheduler:
+  name: cosine
+  milestones: [30, 60]
+  gamma: 0.1
+
+pretrain:
+  name: byol
+  epochs: 10
+  proj_dim: 256
+  pred_dim: 256
+  momentum: 0.99
+  temperature: 0.2
+  temp_student: 0.1
+  temp_teacher: 0.04
+
+train:
+  epochs: 20
+
+runtime:
+  device: cuda
+  output_dir: artifacts
+  seed: 0
+
+experiment:
+  shots: [10, 20, 50]
+  seeds: [0]
+  families: [official, byol, mocov3, supcon, dino, yolo26n, svm]

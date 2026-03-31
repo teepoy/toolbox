@@ -1,0 +1,13 @@
+model:
+  num_classes: 100
+  backbone:
+    name: convnextv2_atto
+    model_name: convnextv2_atto
+    pretrained: true
+    num_classes: 100
+  head:
+    name: view_fusion
+    attn_dim: 256
+    num_views: 2
+    num_heads: 4
+    num_layers: 2

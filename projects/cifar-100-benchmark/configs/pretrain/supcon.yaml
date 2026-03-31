@@ -1,0 +1,9 @@
+pretrain:
+  name: supcon
+  epochs: 10
+  proj_dim: 256
+  pred_dim: 256
+  momentum: 0.99
+  temperature: 0.1
+  temp_student: 0.1
+  temp_teacher: 0.04

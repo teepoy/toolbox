@@ -1,0 +1,8 @@
+data:
+  dataset_name: cifar100
+  label_key: fine_label
+  image_size: 64
+  batch_size: 64
+  eval_batch_size: 128
+  num_workers: 4
+  val_per_class: 50

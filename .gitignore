@@ -1,0 +1,47 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+**/.venv/
+
+# Build / packaging
+build/
+dist/
+site/
+
+# Logs / temp
+*.log
+*.tmp
+*.swp
+
+# Jupyter
+.notebook_cache/
+
+# Rust / cargo
+**/target/
+
+# Project-generated outputs
+projects/**/outputs/
+projects/*/artifacts
