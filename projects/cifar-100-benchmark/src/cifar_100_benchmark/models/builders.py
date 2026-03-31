@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from omegaconf import DictConfig
 from torch import nn
 
+from cifar_100_benchmark.models.backbone.convnext32 import ConvNeXt32Backbone
 from cifar_100_benchmark.models.backbone.convnextv2 import ConvNeXtV2Backbone
 from cifar_100_benchmark.models.backbone.yolo26 import YOLO26Backbone
 from cifar_100_benchmark.models.head.classifier import LinearHead
@@ -39,6 +40,11 @@ def build_backbone(cfg: DictConfig) -> nn.Module:
         return ConvNeXtV2Backbone(
             model_name=str(cfg.model_name),
             pretrained=bool(cfg.pretrained),
+        )
+    if name == "convnext32_atto":
+        return ConvNeXt32Backbone(
+            num_classes=0,
+            drop_path_rate=float(getattr(cfg, "drop_path_rate", 0.1)),
         )
     if name == "yolo26n":
         return YOLO26Backbone(num_classes=int(cfg.num_classes))

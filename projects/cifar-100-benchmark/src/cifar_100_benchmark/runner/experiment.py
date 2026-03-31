@@ -18,7 +18,16 @@ from cifar_100_benchmark.data.cifar100 import (
     make_transforms,
     select_indices,
 )
-from cifar_100_benchmark.data.splits import SplitIndices, build_split_indices, load_split, save_split
+from cifar_100_benchmark.data.splits import (
+    SeedSplit,
+    ShotSplit,
+    build_seed_split,
+    build_shot_split,
+    load_seed_split,
+    load_shot_split,
+    save_seed_split,
+    save_shot_split,
+)
 from cifar_100_benchmark.eval.report import read_summary, write_leaderboard, write_summary
 from cifar_100_benchmark.losses.supervised import build_supervised_loss
 from cifar_100_benchmark.models.builders import build_backbone, build_classifier
@@ -37,22 +46,46 @@ def _resolve_device(cfg: DictConfig) -> torch.device:
     return torch.device("cpu")
 
 
-def _materialize_split(cfg: DictConfig, train_ds: Dataset, shot: int, seed: int, splits_dir: Path) -> SplitIndices:
-    split_path = splits_dir / f"shot_{shot}_seed_{seed}.json"
+def _materialize_seed_split(cfg: DictConfig, train_ds: Dataset, seed: int, splits_dir: Path) -> SeedSplit:
+    seed_dir = splits_dir / "seed_splits"
+    split_path = seed_dir / f"seed_{seed}.json"
     if split_path.exists():
-        return load_split(split_path)
-    split = build_split_indices(
+        return load_seed_split(split_path)
+    split = build_seed_split(
         train_ds,
+        seed=seed,
+        ssl_pool_per_class=int(cfg.data.ssl_pool_per_class),
+        label_key=str(cfg.data.label_key),
+    )
+    save_seed_split(split, seed_dir)
+    return split
+
+
+def _materialize_shot_split(
+    cfg: DictConfig,
+    train_ds: Dataset,
+    seed_split: SeedSplit,
+    shot: int,
+    seed: int,
+    splits_dir: Path,
+) -> ShotSplit:
+    shot_dir = splits_dir / "shot_splits"
+    split_path = shot_dir / f"shot_{shot}_seed_{seed}.json"
+    if split_path.exists():
+        return load_shot_split(split_path)
+    split = build_shot_split(
+        train_ds,
+        seed_split=seed_split,
         shot=shot,
         seed=seed,
         label_key=str(cfg.data.label_key),
         val_per_class=int(cfg.data.val_per_class),
     )
-    save_split(split, splits_dir)
+    save_shot_split(split, shot_dir)
     return split
 
 
-def _make_supervised_loaders(cfg: DictConfig, split: SplitIndices, train_ds: Dataset, test_ds: Dataset):
+def _make_supervised_loaders(cfg: DictConfig, split: ShotSplit, train_ds: Dataset, test_ds: Dataset):
     tfs = make_transforms(int(cfg.data.image_size))
     fewshot_ds = select_indices(train_ds, split.fewshot_train)
     val_ds = select_indices(train_ds, split.val)
@@ -65,8 +98,8 @@ def _make_supervised_loaders(cfg: DictConfig, split: SplitIndices, train_ds: Dat
     return train_loader, val_loader, test_loader
 
 
-def _make_ssl_loader(cfg: DictConfig, split: SplitIndices, train_ds: Dataset):
-    ssl_ds = select_indices(train_ds, split.ssl_pool)
+def _make_ssl_loader(cfg: DictConfig, seed_split: SeedSplit, train_ds: Dataset):
+    ssl_ds = select_indices(train_ds, seed_split.ssl_pool_fixed)
     t1, t2 = make_ssl_pair_transforms(int(cfg.data.image_size))
     ssl_torch = HFPairViewDataset(ssl_ds, t1, t2, label_key=str(cfg.data.label_key))
     return make_loader(ssl_torch, int(cfg.data.batch_size), True, int(cfg.data.num_workers))
@@ -104,17 +137,37 @@ def run_experiment(cfg: DictConfig) -> None:
     img_sizes = [int(x) for x in cfg.experiment.get("img_sizes", [int(cfg.data.image_size)])]
 
     for imgsz in img_sizes:
-        for shot in cfg.experiment.shots:
-            for seed in cfg.experiment.seeds:
-                local_cfg = cast(
-                    DictConfig, OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
-                )
+        for seed in cfg.experiment.seeds:
+            local_seed_cfg = cast(DictConfig, OmegaConf.create(OmegaConf.to_container(cfg, resolve=True)))
+            local_seed_cfg.runtime.seed = int(seed)
+            local_seed_cfg.data.image_size = int(imgsz)
+            seed_split = _materialize_seed_split(local_seed_cfg, bundle.train, int(seed), splits_dir)
+
+            ssl_ckpts: dict[str, str] = {}
+            for family in cfg.experiment.families:
+                family = str(family)
+                if family not in {"byol", "mocov3", "supcon", "dino"}:
+                    continue
+                pretrain_out = run_root / "pretrain" / f"{family}_img{imgsz}_seed{seed}"
+                ckpt_path = pretrain_out / "backbone.pt"
+                if ckpt_path.exists():
+                    ssl_ckpts[family] = str(ckpt_path)
+                    console.print(f"[cyan]Reuse SSL ckpt[/cyan] {family}_img{imgsz}_seed{seed}")
+                    continue
+                ssl_loader = _make_ssl_loader(local_seed_cfg, seed_split, bundle.train)
+                local_seed_cfg.pretrain.name = family
+                ssl_ckpts[family] = str(run_pretrain(local_seed_cfg, ssl_loader, device, pretrain_out))
+
+            for shot in cfg.experiment.shots:
+                local_cfg = cast(DictConfig, OmegaConf.create(OmegaConf.to_container(cfg, resolve=True)))
                 local_cfg.runtime.seed = int(seed)
                 local_cfg.data.image_size = int(imgsz)
 
-                split = _materialize_split(local_cfg, bundle.train, int(shot), int(seed), splits_dir)
+                shot_split = _materialize_shot_split(
+                    local_cfg, bundle.train, seed_split, int(shot), int(seed), splits_dir
+                )
                 train_loader, val_loader, test_loader = _make_supervised_loaders(
-                    local_cfg, split, bundle.train, bundle.test
+                    local_cfg, shot_split, bundle.train, bundle.test
                 )
 
                 for family in cfg.experiment.families:
@@ -127,12 +180,7 @@ def run_experiment(cfg: DictConfig) -> None:
                     out_dir = run_root / "runs" / run_id
                     out_dir.mkdir(parents=True, exist_ok=True)
 
-                    init_ckpt = None
-                    if family in {"byol", "mocov3", "supcon", "dino"}:
-                        ssl_loader = _make_ssl_loader(local_cfg, split, bundle.train)
-                        local_cfg.pretrain.name = family
-                        pretrain_out = run_root / "pretrain" / f"{family}_img{imgsz}_shot{shot}_seed{seed}"
-                        init_ckpt = str(run_pretrain(local_cfg, ssl_loader, device, pretrain_out))
+                    init_ckpt = ssl_ckpts.get(family)
 
                     if family == "svm":
                         backbone = build_backbone(local_cfg.model.backbone).to(device)
@@ -145,6 +193,7 @@ def run_experiment(cfg: DictConfig) -> None:
                                 "seed": int(seed),
                                 "val_top1": -1.0,
                                 "test_top1": round(svm_result.top1, 4),
+                                "ssl_pool_mode": "fixed",
                             }
                         )
                         write_summary(results, summary_path)
@@ -155,9 +204,15 @@ def run_experiment(cfg: DictConfig) -> None:
                     if family == "yolo26n":
                         local_cfg.model.backbone.name = "yolo26n"
                         local_cfg.model.backbone.pretrained = False
+                    elif family == "convnext32":
+                        local_cfg.model.backbone.name = "convnext32_atto"
+                        local_cfg.model.backbone.pretrained = False
                     elif family == "official":
                         local_cfg.model.backbone.name = "convnextv2_atto"
                         local_cfg.model.backbone.pretrained = True
+                    elif family == "random":
+                        local_cfg.model.backbone.name = "convnextv2_atto"
+                        local_cfg.model.backbone.pretrained = False
                     else:
                         local_cfg.model.backbone.name = "convnextv2_atto"
                         local_cfg.model.backbone.pretrained = False
@@ -175,6 +230,7 @@ def run_experiment(cfg: DictConfig) -> None:
                             "seed": int(seed),
                             "val_top1": round(ft_result.best_val_top1, 4),
                             "test_top1": round(test_metrics.top1, 4),
+                            "ssl_pool_mode": "fixed",
                         }
                     )
                     write_summary(results, summary_path)
