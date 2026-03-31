@@ -1,0 +1,11 @@
+experiment:
+  img_sizes: [64, 128]
+  shots: [10, 20, 50]
+  seeds: [0]
+  families: [official, byol, mocov3, supcon, dino, yolo26n, svm]
+
+pretrain:
+  epochs: 10
+
+train:
+  epochs: 20

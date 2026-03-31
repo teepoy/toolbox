@@ -32,6 +32,12 @@ Reduced full run (shots 10,20,50 with seed 0):
 .venv/bin/python -m cifar_100_benchmark.runner.run_all --full-experiment full_reduced
 ```
 
+Reduced full run with 64 and 128 resolution ablation:
+
+```bash
+.venv/bin/python -m cifar_100_benchmark.runner.run_all --full-experiment full_reduced_2res
+```
+
 Full saved configuration for later (shots 1,5,10,20,50 and seeds 0,1,2):
 
 ```bash

@@ -1,0 +1,11 @@
+experiment:
+  img_sizes: [128]
+  shots: [10]
+  seeds: [0]
+  families: [official, byol, svm]
+
+pretrain:
+  epochs: 1
+
+train:
+  epochs: 1

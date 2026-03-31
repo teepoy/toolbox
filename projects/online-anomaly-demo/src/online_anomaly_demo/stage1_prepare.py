@@ -74,7 +74,7 @@ def _extract_clip_embeddings(
 
             image_inputs = processor(images=images, return_tensors="pt")
             image_inputs = {k: v.to(device) for k, v in image_inputs.items()}
-            image_features = model.get_image_features(**image_inputs)
+            image_features = _extract_feature_tensor(model.get_image_features(**image_inputs))
             image_features = (
                 _l2_normalize(image_features).cpu().numpy().astype(np.float32)
             )
@@ -83,7 +83,7 @@ def _extract_clip_embeddings(
                 text=prompts, return_tensors="pt", padding=True, truncation=True
             )
             text_inputs = {k: v.to(device) for k, v in text_inputs.items()}
-            text_features = model.get_text_features(**text_inputs)
+            text_features = _extract_feature_tensor(model.get_text_features(**text_inputs))
             text_features = (
                 _l2_normalize(text_features).cpu().numpy().astype(np.float32)
             )
@@ -104,3 +104,13 @@ def _resolve_device(device_cfg: str) -> str:
 
 def _l2_normalize(x: torch.Tensor) -> torch.Tensor:
     return x / x.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+
+
+def _extract_feature_tensor(output: Any) -> torch.Tensor:
+    if isinstance(output, torch.Tensor):
+        return output
+    if hasattr(output, "pooler_output"):
+        return output.pooler_output
+    if hasattr(output, "last_hidden_state"):
+        return output.last_hidden_state[:, 0, :]
+    raise TypeError(f"Unsupported feature output type: {type(output)}")

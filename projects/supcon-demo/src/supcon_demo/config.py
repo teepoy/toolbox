@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -79,7 +80,7 @@ def load_config(
     base = _default_config()
     loaded = OmegaConf.load(config_file)
     override_cfg = OmegaConf.from_dotlist(overrides or [])
-    config = OmegaConf.merge(base, loaded, override_cfg)
+    config = cast(DictConfig, OmegaConf.merge(base, loaded, override_cfg))
     OmegaConf.set_struct(config, True)
     return config
 

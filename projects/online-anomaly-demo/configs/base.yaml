@@ -25,12 +25,12 @@ stream:
   t1_noise_std: 0.01
   t1_major_class_id: 0
   t1_major_class_ratio: 0.8
-  t2_new_class_ratio: 0.3
-  t2_mismatch_ratio: 0.3
+  t2_new_class_ratio: 0.5
+  t2_mismatch_ratio: 0.2
 
 detection:
   text_image_threshold: 0.18
-  memory_threshold: 0.30
+  memory_threshold: 0.95
   top_k: 1
 
 clustering:

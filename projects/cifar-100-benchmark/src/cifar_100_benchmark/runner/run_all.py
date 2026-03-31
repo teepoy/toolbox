@@ -23,7 +23,8 @@ def main() -> None:
     config_dir = Path(args.config_dir)
 
     if not args.skip_smoke:
-        smoke_cfg = load_config(config_dir, "smoke", args.override)
+        smoke_name = "smoke_128" if args.full_experiment.endswith("2res") else "smoke"
+        smoke_cfg = load_config(config_dir, smoke_name, args.override)
         run_experiment(smoke_cfg)
 
     full_cfg = load_config(config_dir, args.full_experiment, args.override)
