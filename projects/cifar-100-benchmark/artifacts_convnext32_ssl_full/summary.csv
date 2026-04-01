@@ -1,0 +1,16 @@
+family,imgsz,shot,seed,val_top1,test_top1,ssl_pool_mode
+convnext32,64,10,0,11.2,11.74,fixed
+convnext32_byol,64,10,0,24.28,24.28,fixed
+convnext32_mocov3,64,10,0,27.32,27.71,fixed
+convnext32_supcon,64,10,0,31.32,30.64,fixed
+convnext32_dino,64,10,0,12.36,12.78,fixed
+convnext32,64,20,0,17.92,17.34,fixed
+convnext32_byol,64,20,0,33.56,33.25,fixed
+convnext32_mocov3,64,20,0,36.82,36.19,fixed
+convnext32_supcon,64,20,0,38.72,37.87,fixed
+convnext32_dino,64,20,0,20.32,19.97,fixed
+convnext32,64,50,0,27.98,28.26,fixed
+convnext32_byol,64,50,0,43.24,43.31,fixed
+convnext32_mocov3,64,50,0,46.28,46.42,fixed
+convnext32_supcon,64,50,0,45.22,45.87,fixed
+convnext32_dino,64,50,0,31.48,31.46,fixed

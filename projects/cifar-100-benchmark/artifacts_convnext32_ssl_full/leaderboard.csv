@@ -1,0 +1,16 @@
+family,imgsz,shot,mean_top1,runs,std_top1
+convnext32,64,10,11.74,1,0.0
+convnext32,64,20,17.34,1,0.0
+convnext32,64,50,28.26,1,0.0
+convnext32_byol,64,10,24.28,1,0.0
+convnext32_byol,64,20,33.25,1,0.0
+convnext32_byol,64,50,43.31,1,0.0
+convnext32_dino,64,10,12.78,1,0.0
+convnext32_dino,64,20,19.97,1,0.0
+convnext32_dino,64,50,31.46,1,0.0
+convnext32_mocov3,64,10,27.71,1,0.0
+convnext32_mocov3,64,20,36.19,1,0.0
+convnext32_mocov3,64,50,46.42,1,0.0
+convnext32_supcon,64,10,30.64,1,0.0
+convnext32_supcon,64,20,37.87,1,0.0
+convnext32_supcon,64,50,45.87,1,0.0
