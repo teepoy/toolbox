@@ -1,9 +1,13 @@
 pretrain:
   name: byol
-  epochs: 10
+  epochs: 60
   proj_dim: 256
   pred_dim: 256
   momentum: 0.99
   temperature: 0.2
   temp_student: 0.1
   temp_teacher: 0.04
+  early_stop_enabled: true
+  early_stop_min_epochs: 10
+  early_stop_patience: 5
+  early_stop_min_delta: 0.005

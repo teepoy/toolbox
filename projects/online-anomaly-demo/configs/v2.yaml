@@ -1,0 +1,18 @@
+detection_v2:
+  top_k: 5
+  memory_aggregate: mean
+  memory_threshold: 0.92
+  memory_consistency_threshold: 0.96
+  text_image_threshold: 0.1
+  memory_weight: 0.75
+  text_weight: 0.25
+  calibration_scale: 1.0
+  calibration_bias: 0.0
+
+logging_v2:
+  save_scores: true
+  scores_parquet: artifacts/v2/run_scores.parquet
+
+paths:
+  artifacts_dir: artifacts/v2
+  plots_dir: artifacts/v2/plots

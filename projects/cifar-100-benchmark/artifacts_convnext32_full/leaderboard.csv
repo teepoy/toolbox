@@ -1,0 +1,4 @@
+family,imgsz,shot,mean_top1,runs,std_top1
+convnext32,64,10,3.94,1,0.0
+convnext32,64,20,16.24,1,0.0
+convnext32,64,50,27.98,1,0.0

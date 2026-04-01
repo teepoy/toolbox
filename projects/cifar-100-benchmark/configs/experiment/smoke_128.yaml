@@ -1,8 +1,10 @@
 experiment:
   img_sizes: [128]
+  dropped_img_sizes: [128]
+  notes: "Deprecated: 128 dropped for ConvNeXtV2-Atto due to stem/neck stride behavior."
   shots: [10]
   seeds: [0]
-  families: [official, byol, svm]
+  families: [official, random, byol, svm]
 
 pretrain:
   epochs: 1

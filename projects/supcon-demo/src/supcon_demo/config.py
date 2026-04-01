@@ -52,6 +52,13 @@ def _default_config() -> DictConfig:
                 "log_every_steps": 10,
                 "save_every_epochs": 1,
                 "use_amp": True,
+                "self_supervised": {
+                    "enabled": False,
+                    "epochs": 20,
+                    "lr": 1e-4,
+                    "weight_decay": 1e-4,
+                    "temperature": 0.07,
+                },
             },
             "benchmark": {
                 "batch_size": 32,

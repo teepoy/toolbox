@@ -1,0 +1,20 @@
+experiment:
+  shots: [10, 20, 50]
+  seeds: [0]
+  families: [convnext32, convnext32_byol, convnext32_mocov3, convnext32_supcon, convnext32_dino]
+
+pretrain:
+  epochs: 60
+  early_stop_enabled: true
+  early_stop_min_epochs: 10
+  early_stop_patience: 5
+  early_stop_min_delta: 0.005
+
+train:
+  epochs: 20
+
+data:
+  ssl_pool_per_class: 200
+  # ConvNeXt32 requires batch_size=32 for SSL pretraining on 10GB GPU
+  # (batch_size=64 causes OOM with two-backbone SSL methods like BYOL/MoCo)
+  batch_size: 32

@@ -1,0 +1,10 @@
+{"epoch": 1, "method": "supcon", "ssl_loss": 2.4077}
+{"epoch": 2, "method": "supcon", "ssl_loss": 2.228}
+{"epoch": 3, "method": "supcon", "ssl_loss": 2.1379}
+{"epoch": 4, "method": "supcon", "ssl_loss": 2.0928}
+{"epoch": 5, "method": "supcon", "ssl_loss": 2.0543}
+{"epoch": 6, "method": "supcon", "ssl_loss": 2.0138}
+{"epoch": 7, "method": "supcon", "ssl_loss": 1.9998}
+{"epoch": 8, "method": "supcon", "ssl_loss": 1.9628}
+{"epoch": 9, "method": "supcon", "ssl_loss": 1.9166}
+{"epoch": 10, "method": "supcon", "ssl_loss": 1.913}

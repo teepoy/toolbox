@@ -135,6 +135,16 @@ def run_experiment(cfg: DictConfig) -> None:
 
     bundle = load_cifar100()
     img_sizes = [int(x) for x in cfg.experiment.get("img_sizes", [int(cfg.data.image_size)])]
+    SSL_FAMILIES = {
+        "byol",
+        "mocov3",
+        "supcon",
+        "dino",
+        "convnext32_byol",
+        "convnext32_mocov3",
+        "convnext32_supcon",
+        "convnext32_dino",
+    }
 
     for imgsz in img_sizes:
         for seed in cfg.experiment.seeds:
@@ -146,7 +156,7 @@ def run_experiment(cfg: DictConfig) -> None:
             ssl_ckpts: dict[str, str] = {}
             for family in cfg.experiment.families:
                 family = str(family)
-                if family not in {"byol", "mocov3", "supcon", "dino"}:
+                if family not in SSL_FAMILIES:
                     continue
                 pretrain_out = run_root / "pretrain" / f"{family}_img{imgsz}_seed{seed}"
                 ckpt_path = pretrain_out / "backbone.pt"
@@ -155,8 +165,18 @@ def run_experiment(cfg: DictConfig) -> None:
                     console.print(f"[cyan]Reuse SSL ckpt[/cyan] {family}_img{imgsz}_seed{seed}")
                     continue
                 ssl_loader = _make_ssl_loader(local_seed_cfg, seed_split, bundle.train)
-                local_seed_cfg.pretrain.name = family
-                ssl_ckpts[family] = str(run_pretrain(local_seed_cfg, ssl_loader, device, pretrain_out))
+                pretrain_name = family.removeprefix("convnext32_")
+                original_backbone_name = str(local_seed_cfg.model.backbone.name)
+                original_backbone_pretrained = bool(local_seed_cfg.model.backbone.pretrained)
+                local_seed_cfg.pretrain.name = pretrain_name
+                if family.startswith("convnext32_"):
+                    local_seed_cfg.model.backbone.name = "convnext32_atto"
+                    local_seed_cfg.model.backbone.pretrained = False
+                try:
+                    ssl_ckpts[family] = str(run_pretrain(local_seed_cfg, ssl_loader, device, pretrain_out))
+                finally:
+                    local_seed_cfg.model.backbone.name = original_backbone_name
+                    local_seed_cfg.model.backbone.pretrained = original_backbone_pretrained
 
             for shot in cfg.experiment.shots:
                 local_cfg = cast(DictConfig, OmegaConf.create(OmegaConf.to_container(cfg, resolve=True)))
@@ -205,6 +225,9 @@ def run_experiment(cfg: DictConfig) -> None:
                         local_cfg.model.backbone.name = "yolo26n"
                         local_cfg.model.backbone.pretrained = False
                     elif family == "convnext32":
+                        local_cfg.model.backbone.name = "convnext32_atto"
+                        local_cfg.model.backbone.pretrained = False
+                    elif family in {"convnext32_byol", "convnext32_mocov3", "convnext32_supcon", "convnext32_dino"}:
                         local_cfg.model.backbone.name = "convnext32_atto"
                         local_cfg.model.backbone.pretrained = False
                     elif family == "official":

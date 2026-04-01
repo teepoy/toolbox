@@ -1,0 +1,2 @@
+family,imgsz,shot,seed,val_top1,test_top1,ssl_pool_mode
+convnext32_byol,64,10,0,2.64,3.05,fixed

@@ -1,6 +1,7 @@
 data:
   dataset_name: cifar100
   label_key: fine_label
+  ssl_pool_per_class: 200
   image_size: 64
   batch_size: 64
   eval_batch_size: 128

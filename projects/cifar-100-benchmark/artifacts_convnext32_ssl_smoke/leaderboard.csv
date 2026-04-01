@@ -1,0 +1,2 @@
+family,imgsz,shot,mean_top1,runs,std_top1
+convnext32_byol,64,10,3.05,1,0.0

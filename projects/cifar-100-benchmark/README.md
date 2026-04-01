@@ -4,6 +4,7 @@ This repository now includes a modular benchmark pipeline for CIFAR-100 few-shot
 
 - YOLO26n classification baseline
 - ConvNeXtV2-Atto official pretrained baseline
+- ConvNeXtV2-Atto random initialization baseline
 - SSL pretrained families: BYOL, MoCo v3, SupCon-pretrain, DINO-style
 - SVM baseline on frozen features
 - View fusion network module (`images -> feats -> self-attn -> head`) for later use
@@ -38,6 +39,8 @@ Reduced full run with 64 and 128 resolution ablation:
 .venv/bin/python -m cifar_100_benchmark.runner.run_all --full-experiment full_reduced_2res
 ```
 
+Note: `imgsz=128` is now considered deprecated/dropped for ConvNeXtV2-Atto in this project due to aggressive early downsampling behavior relative to CIFAR scale. Use `full_reduced` for active runs.
+
 Full saved configuration for later (shots 1,5,10,20,50 and seeds 0,1,2):
 
 ```bash
@@ -45,3 +48,12 @@ Full saved configuration for later (shots 1,5,10,20,50 and seeds 0,1,2):
 ```
 
 Artifacts are saved under `artifacts/` (split files, checkpoints, metrics, summary, leaderboard).
+
+### Split protocol
+
+Current SSL protocol is shot-independent:
+
+- Build a fixed unlabeled SSL pool once per seed (`ssl_pool_per_class`, default 200/class)
+- Build few-shot train/val splits from the remaining supervised pool for each shot
+- Reuse one SSL checkpoint per `(method, seed, imgsz)` across all shots
+- SSL pretraining uses early-stop-on-plateau by default (`min_epochs=10`, `patience=5`, `min_delta=0.005`, `max_epochs=60`)

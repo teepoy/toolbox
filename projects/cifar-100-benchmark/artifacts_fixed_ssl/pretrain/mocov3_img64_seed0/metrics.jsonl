@@ -1,0 +1,10 @@
+{"epoch": 1, "method": "mocov3", "ssl_loss": 1.1583}
+{"epoch": 2, "method": "mocov3", "ssl_loss": 0.716}
+{"epoch": 3, "method": "mocov3", "ssl_loss": 0.6505}
+{"epoch": 4, "method": "mocov3", "ssl_loss": 0.6152}
+{"epoch": 5, "method": "mocov3", "ssl_loss": 0.5931}
+{"epoch": 6, "method": "mocov3", "ssl_loss": 0.5786}
+{"epoch": 7, "method": "mocov3", "ssl_loss": 0.5712}
+{"epoch": 8, "method": "mocov3", "ssl_loss": 0.5589}
+{"epoch": 9, "method": "mocov3", "ssl_loss": 0.5508}
+{"epoch": 10, "method": "mocov3", "ssl_loss": 0.5508}

@@ -1,8 +1,12 @@
+- [ ] patch level embedding
+- [ ] how omo multi agent work? (important)
+
 1. dataviewer, dataset compatible (val tool)
 2. vscode remote ssh opencode compatible problem
 3. feat fusion model, arena as so on
 4. memory bank or better tool
 5. supcon
+6. patch level data
 --
 
 1. full stack project to

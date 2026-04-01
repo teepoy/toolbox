@@ -1,0 +1,4 @@
+family,imgsz,shot,seed,val_top1,test_top1,ssl_pool_mode
+convnext32,64,10,0,3.94,3.94,fixed
+convnext32,64,20,0,16.96,16.24,fixed
+convnext32,64,50,0,27.74,27.98,fixed

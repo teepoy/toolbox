@@ -9,6 +9,7 @@ runtime_config: local
 data:
   dataset_name: cifar100
   label_key: fine_label
+  ssl_pool_per_class: 200
   image_size: 64
   batch_size: 64
   eval_batch_size: 128
@@ -45,13 +46,17 @@ scheduler:
 
 pretrain:
   name: byol
-  epochs: 10
+  epochs: 60
   proj_dim: 256
   pred_dim: 256
   momentum: 0.99
   temperature: 0.2
   temp_student: 0.1
   temp_teacher: 0.04
+  early_stop_enabled: true
+  early_stop_min_epochs: 10
+  early_stop_patience: 5
+  early_stop_min_delta: 0.005
 
 train:
   epochs: 20

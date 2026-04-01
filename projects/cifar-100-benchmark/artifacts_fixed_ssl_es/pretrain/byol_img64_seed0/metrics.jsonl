@@ -1,0 +1,8 @@
+{"epoch": 1, "method": "byol", "ssl_loss": 0.3856}
+{"epoch": 2, "method": "byol", "ssl_loss": 0.1605}
+{"epoch": 3, "method": "byol", "ssl_loss": 0.1366}
+{"epoch": 4, "method": "byol", "ssl_loss": 0.1249}
+{"epoch": 5, "method": "byol", "ssl_loss": 0.1225}
+{"epoch": 6, "method": "byol", "ssl_loss": 0.1197}
+{"epoch": 7, "method": "byol", "ssl_loss": 0.1215}
+{"best_epoch": 4, "best_ssl_loss": 0.1249, "epoch": 7, "event": "early_stop", "method": "byol"}

@@ -12,7 +12,7 @@ from supcon_demo.benchmark import run_benchmark
 from supcon_demo.config import load_config, resolve_output_dir
 from supcon_demo.data import load_data
 from supcon_demo.model import SupConModel
-from supcon_demo.training import train_supcon
+from supcon_demo.training import train_self_supervised, train_supcon
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +56,29 @@ def _summarize_metrics(baseline_metrics: dict, finetuned_metrics: dict) -> dict:
             if base_value is not None:
                 summary[f"delta_{section}"][key] = value - base_value
     return summary
+
+
+def _benchmark_and_log(
+    *,
+    model,
+    reference_loader,
+    eval_loader,
+    config,
+    device: torch.device,
+    output_path,
+    stage_name: str,
+) -> dict:
+    metrics = run_benchmark(
+        model=model,
+        reference_loader=reference_loader,
+        eval_loader=eval_loader,
+        config=config,
+        device=device,
+        output_path=output_path,
+        stage_name=stage_name,
+    )
+    print(f"[{stage_name}] knn={metrics['knn']} linear_probe={metrics['linear_probe']}")
+    return metrics
 
 
 def _select_eval_loader(data_bundle: dict, split_name: str):
@@ -116,7 +139,7 @@ def main() -> None:
         OmegaConf.to_yaml(config), encoding="utf-8"
     )
 
-    baseline_metrics = run_benchmark(
+    baseline_metrics = _benchmark_and_log(
         model=model,
         reference_loader=reference_loader,
         eval_loader=eval_loader,
@@ -125,9 +148,26 @@ def main() -> None:
         output_path=output_dir / "baseline_metrics.json",
         stage_name="baseline",
     )
-    print(
-        f"[baseline] knn={baseline_metrics['knn']} linear_probe={baseline_metrics['linear_probe']}"
-    )
+
+    self_supervised_metrics = None
+    post_ssl_metrics = None
+    if bool(config.train.self_supervised.enabled):
+        self_supervised_metrics = train_self_supervised(
+            model=model,
+            train_loader=data_bundle["train_loader"],
+            device=device,
+            config=config,
+            output_dir=output_dir,
+        )
+        post_ssl_metrics = _benchmark_and_log(
+            model=model,
+            reference_loader=reference_loader,
+            eval_loader=eval_loader,
+            config=config,
+            device=device,
+            output_path=output_dir / "post_self_supervised_metrics.json",
+            stage_name="post_self_supervised",
+        )
 
     training_metrics = train_supcon(
         model=model,
@@ -137,7 +177,7 @@ def main() -> None:
         output_dir=output_dir,
     )
 
-    finetuned_metrics = run_benchmark(
+    finetuned_metrics = _benchmark_and_log(
         model=model,
         reference_loader=reference_loader,
         eval_loader=eval_loader,
@@ -146,15 +186,14 @@ def main() -> None:
         output_path=output_dir / "finetuned_metrics.json",
         stage_name="finetuned",
     )
-    print(
-        f"[finetuned] knn={finetuned_metrics['knn']} linear_probe={finetuned_metrics['linear_probe']}"
-    )
 
     summary = {
         "experiment": str(config.experiment.name),
         "device": device.type,
         "split_sizes": data_bundle["split_sizes"],
         "used_pretrained_weights": bool(model.used_pretrained_weights),
+        "self_supervised": self_supervised_metrics,
+        "post_self_supervised": post_ssl_metrics,
         "training": training_metrics,
         **_summarize_metrics(baseline_metrics, finetuned_metrics),
     }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import torch
 from omegaconf import DictConfig
@@ -11,7 +12,12 @@ from torch.utils.data import DataLoader
 
 from cifar_100_benchmark.losses.byol import byol_loss
 from cifar_100_benchmark.models.builders import build_backbone
-from cifar_100_benchmark.pretrain.common import MLP, make_ema_copy, update_momentum
+from cifar_100_benchmark.pretrain.common import (
+    EarlyStopper,
+    MLP,
+    make_ema_copy,
+    update_momentum,
+)
 from cifar_100_benchmark.utils.logging import JsonlLogger, print_metrics_table
 
 
@@ -19,17 +25,19 @@ class BYOLModel(nn.Module):
     def __init__(self, backbone: nn.Module, proj_dim: int, pred_dim: int) -> None:
         super().__init__()
         self.backbone = backbone
-        out_dim = int(backbone.out_dim)
-        self.projector = MLP(out_dim, out_dim, proj_dim)
-        self.predictor = MLP(proj_dim, out_dim, pred_dim)
+        out_dim = int(cast(int, getattr(backbone, "out_dim")))
+        self.projector: MLP = MLP(out_dim, out_dim, proj_dim)
+        self.predictor: MLP = MLP(proj_dim, out_dim, pred_dim)
 
     def forward_online(self, x: torch.Tensor) -> torch.Tensor:
-        z = self.projector(self.backbone.forward_features(x))
-        p = self.predictor(z)
+        feats = cast(Any, self.backbone).forward_features(x)
+        z = cast(MLP, self.projector).forward(feats)
+        p = cast(MLP, self.predictor).forward(z)
         return p
 
     def forward_target(self, x: torch.Tensor) -> torch.Tensor:
-        return self.projector(self.backbone.forward_features(x))
+        feats = cast(Any, self.backbone).forward_features(x)
+        return cast(MLP, self.projector).forward(feats)
 
 
 def run_byol(
@@ -58,6 +66,7 @@ def run_byol(
 
     momentum = float(cfg.pretrain.momentum)
     epochs = int(cfg.pretrain.epochs)
+    early_stopper = EarlyStopper.from_cfg(cfg)
     for epoch in range(1, epochs + 1):
         model.train()
         loss_sum = 0.0
@@ -69,8 +78,10 @@ def run_byol(
             p1 = model.forward_online(x1)
             p2 = model.forward_online(x2)
             with torch.no_grad():
-                z1 = target_projector(target_backbone.forward_features(x1))
-                z2 = target_projector(target_backbone.forward_features(x2))
+                f1 = cast(Any, target_backbone).forward_features(x1)
+                f2 = cast(Any, target_backbone).forward_features(x2)
+                z1 = cast(MLP, target_projector).forward(f1)
+                z2 = cast(MLP, target_projector).forward(f2)
             loss = 0.5 * (byol_loss(p1, z2) + byol_loss(p2, z1))
 
             optimizer.zero_grad(set_to_none=True)
@@ -84,13 +95,25 @@ def run_byol(
             n += bs
             loss_sum += float(loss.item()) * bs
 
+        epoch_loss = loss_sum / max(1, n)
         row = {
             "epoch": epoch,
-            "ssl_loss": round(loss_sum / max(1, n), 4),
+            "ssl_loss": round(epoch_loss, 4),
             "method": "byol",
         }
         logger.log(row)
         print_metrics_table("SSL BYOL", [row])
+        if early_stopper.step(epoch, epoch_loss):
+            stop_row = {
+                "event": "early_stop",
+                "method": "byol",
+                "epoch": epoch,
+                "best_epoch": early_stopper.best_epoch,
+                "best_ssl_loss": round(early_stopper.best_loss, 4),
+            }
+            logger.log(stop_row)
+            print_metrics_table("SSL BYOL", [stop_row])
+            break
 
     ckpt = out_dir / "backbone.pt"
     torch.save(

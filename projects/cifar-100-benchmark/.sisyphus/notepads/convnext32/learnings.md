@@ -41,3 +41,8 @@
 - Confirmed convnext32.py matches the required 40→80→160→320 channel path, 2/2/6/2 depth split, and 3×3 stride-1 stem.
 - The model uses 12 total ConvNeXt blocks with a linear drop-path schedule from 0.0 to drop_path_rate.
 - forward_features returns a 2D (B, 320) tensor after GAP → Flatten → LayerNorm.
+## 2026-04-01
+
+- Added ConvNeXt32 SSL family handling by reusing the same SSL pretrain code path with a method-name prefix strip (`convnext32_` -> base SSL method).
+- For SSL pretraining, temporarily forcing the backbone to `convnext32_atto` and restoring the original backbone afterward keeps the shared config mutation contained.
+- Family-keyed SSL checkpoint reuse continues to work without changing `ssl_ckpts[family]`.

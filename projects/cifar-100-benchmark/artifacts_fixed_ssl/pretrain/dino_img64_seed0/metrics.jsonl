@@ -1,0 +1,10 @@
+{"epoch": 1, "method": "dino", "ssl_loss": 2.2156}
+{"epoch": 2, "method": "dino", "ssl_loss": 0.7452}
+{"epoch": 3, "method": "dino", "ssl_loss": 0.5323}
+{"epoch": 4, "method": "dino", "ssl_loss": 0.4532}
+{"epoch": 5, "method": "dino", "ssl_loss": 0.39}
+{"epoch": 6, "method": "dino", "ssl_loss": 0.354}
+{"epoch": 7, "method": "dino", "ssl_loss": 0.3162}
+{"epoch": 8, "method": "dino", "ssl_loss": 0.2949}
+{"epoch": 9, "method": "dino", "ssl_loss": 0.2743}
+{"epoch": 10, "method": "dino", "ssl_loss": 0.2612}

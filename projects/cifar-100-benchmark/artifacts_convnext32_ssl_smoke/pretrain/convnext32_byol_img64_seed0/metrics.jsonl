@@ -1,0 +1,2 @@
+{"epoch": 1, "method": "byol", "ssl_loss": 0.9671}
+{"epoch": 2, "method": "byol", "ssl_loss": 0.6349}
