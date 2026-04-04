@@ -185,57 +185,6 @@ impl FormatExporter for YoloStubExporter {
     }
 }
 
-/// COCO stub importer.
-///
-/// Detection heuristic: the directory at `path` contains an `annotations/`
-/// subdirectory that holds at least one `.json` file.
-struct CocoStubImporter;
-
-impl FormatImporter for CocoStubImporter {
-    fn name(&self) -> &str {
-        "coco"
-    }
-
-    /// Returns `false` — real detection is implemented in the T13 COCO
-    /// importer.
-    fn detect(&self, _path: &Path) -> bool {
-        false
-    }
-
-    fn import(
-        &self,
-        _db: &Database,
-        _storage: &StorageManager,
-        _path: &Path,
-        _dataset_name: &str,
-    ) -> Result<Dataset> {
-        Err(crate::DmanError::FormatUnsupported(
-            "COCO importer not yet implemented (T13)".to_string(),
-        ))
-    }
-}
-
-/// COCO stub exporter.
-struct CocoStubExporter;
-
-impl FormatExporter for CocoStubExporter {
-    fn name(&self) -> &str {
-        "coco"
-    }
-
-    fn export(
-        &self,
-        _db: &Database,
-        _storage: &StorageManager,
-        _dataset: &Dataset,
-        _output_path: &Path,
-    ) -> Result<()> {
-        Err(crate::DmanError::FormatUnsupported(
-            "COCO exporter not yet implemented (T13)".to_string(),
-        ))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
