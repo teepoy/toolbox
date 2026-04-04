@@ -23,3 +23,11 @@ walkdir = { workspace = true }
 tempfile = { workspace = true }
 assert_cmd = { workspace = true }
 predicates = { workspace = true }
+
+[[test]]
+name = "virtual_integration"
+path = "tests/virtual_integration.rs"
+
+[[test]]
+name = "roundtrip"
+path = "tests/roundtrip/mod.rs"

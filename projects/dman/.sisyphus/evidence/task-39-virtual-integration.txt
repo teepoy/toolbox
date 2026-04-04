@@ -1,0 +1,25 @@
+Task T39: Virtual Dataset + Materialize + Export Integration Test
+Date: 2026-04-05
+
+Command run:
+  cargo test -p dman-core --test virtual_integration
+
+Result: 12 passed; 0 failed; 0 ignored
+
+Tests:
+  test_full_pipeline_create_evaluate_materialize ... ok
+  test_filter_by_category_pipeline ... ok
+  test_filter_has_annotations ... ok
+  test_chain_filter_then_sample ... ok
+  test_merge_two_datasets_pipeline ... ok
+  test_schema_transform_rename_via_materialize ... ok
+  test_vds_referencing_deleted_base_evaluates_empty ... ok
+  test_preview_limits_results ... ok
+  test_vds_list_get_delete ... ok
+  test_materialize_preserves_annotations ... ok
+  test_delete_nonexistent_vds_returns_error ... ok
+  test_filter_by_metadata_field ... ok
+
+Files created/modified:
+  crates/core/tests/virtual_integration.rs (new)
+  crates/core/Cargo.toml ([[test]] entry added)

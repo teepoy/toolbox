@@ -920,3 +920,43 @@ match result {
 
 ### Test Results
 9 builder tests pass, 31 total dman-python tests pass, 0 failures.
+
+## T39: Virtual Dataset Integration Tests (2026-04-05)
+
+### VirtualDatasetService::create() actual signature
+```rust
+pub fn create(db: &Database, name: &str, source_datasets: Vec<i64>, definition: &VirtualDatasetDef) -> Result<VirtualDataset>
+```
+NOT `base_dataset_name: &str` — takes raw Vec<i64> of dataset IDs.
+
+### materialize() actual signature
+```rust
+pub fn materialize(db: &Database, storage: &StorageManager, vds: &VirtualDataset, output_name: &str) -> Result<Dataset>
+```
+Requires a StorageManager (use `StorageManager::new(tmp.path().to_path_buf())`).
+
+### VirtualDatasetDef variants (all tested)
+- `Filter { column, op, value }` — column="category" or "category_name" for category; "annotated" for has-annotations; "metadata.KEY" for metadata fields
+- `Merge { datasets: Vec<i64> }` — union of source_datasets + extra datasets
+- `Sample { ratio: f64 }` — deterministic hash-based sample
+- `Split { ratios: HashMap<String, f64> }` — partitions into named buckets
+- `SchemaTransform { transforms: Vec<SchemaOp> }` — renames/adds/removes/casts metadata fields
+- `Chain(Vec<VirtualDatasetDef>)` — sequential pipeline
+
+### FilterOp variants: Eq, Ne, Gt, Lt, Gte, Lte, Contains, In
+
+### Integration test pattern for materialization
+- Use `TempDir::new()` + `StorageManager::new(tmp.path().to_path_buf())`
+- Insert datasets directly via SQL (bypasses DatasetService path-exists check)
+- Verify materialized dataset via `DatasetService::get_by_id()` after materialize
+
+### Behavior when base dataset is deleted after VDS creation
+- `VirtualDatasetService::evaluate()` returns empty Vec (no panic)
+- `fetch_images_for_datasets()` returns empty for non-existent dataset IDs
+
+### Cargo.toml [[test]] entry required to name integration test target
+```toml
+[[test]]
+name = "virtual_integration"
+path = "tests/virtual_integration.rs"
+```
