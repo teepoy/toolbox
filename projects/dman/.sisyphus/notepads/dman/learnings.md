@@ -709,3 +709,153 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 252 tests pass (was 250 before T31, 252 after T32 added 2 new always-compiled tests), 0 failures.
+
+## T32 Follow-up: Fixing Compile Errors in format.rs (2026-04-04)
+
+### Problem: `.cast()` error type is NOT PyErr
+
+- `PyO3 0.28`: `.cast::<T>()` returns `Result<Bound<'py, T>, CastError<'_, '_>>` — NOT `PyErr`
+- `.extract()` still returns `Result<T, PyErr>`
+- Explicit type annotations `|e: PyErr|` on `.map_err` after `.cast()` cause `E0631: type mismatch in closure arguments`
+- Fix: remove type annotation from `.cast()` closures → `|e| DmanError::PluginError(e.to_string())`
+- Keep `|e: PyErr|` on `.extract()` closures to help type inference
+
+### Problem: `extract()` closures also need explicit type annotations
+
+- After removing ALL `|e: PyErr|` annotations, `.extract()` closures get `E0282: type annotations needed`
+- Because the closure error type can't be inferred when the return type comes from a chained `.ok_or_else()` + `?`
+- Fix: selectively keep `|e: PyErr|` only on `.extract()` closures; use `|e|` only on `.cast()` closures
+
+### Problem: Trait method not in scope
+
+- `detect()`, `import()`, `export()` come from `FormatImporter`/`FormatExporter` traits
+- In test module, must explicitly `use dman_core::formats::FormatImporter;` before calling trait methods
+- Compiler hint: `trait FormatImporter which provides detect is implemented but not in scope`
+
+### Problem: Python linker can't find libpython3.12
+
+- Workspace pyo3 uses `features = ["extension-module"]` which prevents linking libpython (for cdylib)
+- Test binary needs to link against Python shared library
+- Fix: override pyo3 in `crates/python/Cargo.toml` without `extension-module`, add `auto-initialize`:
+  ```toml
+  pyo3 = { version = "0.28", features = ["auto-initialize"], optional = true }
+  ```
+- On Ubuntu 24.04 with Python 3.12: `/usr/lib/x86_64-linux-gnu/libpython3.12.so` doesn't exist (only versioned `.so.1`)
+- The unversioned `.so` symlink is at `/usr/lib/python3.12/config-3.12-x86_64-linux-gnu/libpython3.12.so`
+- Fix: add `.cargo/config.toml` with linker search path:
+  ```toml
+  [target.x86_64-unknown-linux-gnu]
+  rustflags = ["-L", "/usr/lib/python3.12/config-3.12-x86_64-linux-gnu"]
+  ```
+
+### Problem: Python module name collision between tests
+
+- `PyModule::from_code()` with fixed module name `"plugin"` causes test contamination
+- Python caches modules in `sys.modules["plugin"]`; second test gets cached module with `detect` from first test
+- Test that expects `detect` to be absent actually finds it from previous test's module
+- Fix: use path as module name (`c_mod = CString::new(path_str)`) so each plugin gets unique module name
+
+### Files Changed
+- `crates/python/src/plugins/format.rs` — fixed |e: PyErr| annotations, added trait imports, fixed module name
+- `crates/python/Cargo.toml` — replaced workspace pyo3 dep with version-direct without extension-module
+- `.cargo/config.toml` — new: linker search path for libpython3.12
+
+### Test Results
+16 tests pass (was 2 always-compiled format tests before fix), 0 failures.
+
+## T27: Gallery View — React SPA (2026-04-04)
+
+### Key Findings
+
+- Gallery page uses `useParams<{ name?: string }>()` to read dataset name from URL; syncs with state via `useEffect([datasets, routeName])`
+- When route name doesn't match any dataset, falls back to `datasets[0]` and calls `navigate(..., { replace: true })` to correct the URL
+- `// eslint-disable-line react-hooks/exhaustive-deps` is necessary on the route-sync `useEffect` dependency array — `navigate` is stable but including it causes re-run loops; only need `[datasets, routeName]`
+- Categories endpoint (`/api/datasets/:name/categories`) fetch failures are silently swallowed — categories are optional for filtering, dataset may have none
+- API response shape: `{ data: T[], pagination: { page, per_page, total } }` — always unwrap `.data` from response
+- Image URL pattern: `/images/{dataset_id}/{filename}` — use `img.dataset_id` not `selectedDataset.id`
+- `encodeURIComponent(img.file_name)` prevents issues with spaces/special chars in filenames
+- `loading="lazy"` on `<img>` for performance in large grids
+- `data-testid` attributes placed on `<select>` elements directly (not wrapper divs) for Playwright targeting
+- Pre-commit hook auto-fixes end-of-file newlines in minified JS dist assets; second commit attempt passes
+- `dist/` is gitignored by Vite's default `.gitignore` — must `git add -f crates/server/frontend/dist/` for rust-embed to pick it up
+
+### Files Changed
+- `crates/server/frontend/src/pages/Gallery.tsx` — new (~315 lines)
+- `crates/server/frontend/src/App.tsx` — replaced placeholder `Datasets` component with `Gallery` import; removed unused stub
+- `crates/server/frontend/dist/` — rebuilt and force-committed
+
+### Test Results
+18 dman-server tests pass, 0 failures, frontend `npm run build` exits 0.
+
+## T28: Detail View — Image + Metadata Inspector + Annotations Overlay (2026-04-04)
+
+### Key Findings
+
+- `GET /api/datasets/{name}/images/{id}` returns `{ data: { image: Image, annotations: Annotation[] } }` — unwrap `.data`, then access `.image` and `.annotations`
+- `BBox` struct in Rust has `width`/`height` fields; COCO bbox stored as `{"x":..,"y":..,"width":..,"height":..}` after serde deserialization
+- YOLO bbox stored as `{"x":cx,"y":cy,"w":w,"h":h,"normalized":true}` — uses `w`/`h` keys, NOT `width`/`height`, so serde fails to deserialize into `BBox` struct → annotations come back with `bbox: null` for YOLO datasets
+- Frontend `RawBBox` interface should accept both `w`/`h` and `width`/`height` for robustness
+- YOLO coordinate convention: x,y are the CENTER of the bounding box (normalized 0–1); w,h are fractions of image size → convert with `(x - w/2) * imgW`, `(y - h/2) * imgH`
+- COCO coordinate convention: x,y are the TOP-LEFT corner in pixel coordinates; w,h are pixel dimensions
+- HTML5 Canvas overlay: set `canvas.width = displayWidth` and `canvas.height = displayHeight` (device pixels), scale bbox coords by `displayWidth / naturalWidth` to map natural image coords to display coords
+- ResizeObserver on the `<img>` element updates display dimensions on window resize — needed for correct overlay alignment
+- `data-testid="bbox-overlay"` must always be present; render empty canvas when no bbox annotations exist
+- React Router `useParams<{ datasetName: string; imageId: string }>()` — route must match `:datasetName` and `:imageId` param names exactly
+- Keyboard navigation: `window.addEventListener('keydown', handler)` in `useEffect` with `navigateToPrev`/`navigateToNext` as `useCallback` deps
+- Prev/next image IDs: fetch all images (up to 500 per page), sort by ID, find neighbors — handles pagination for large datasets
+- `void datasetId` pattern to suppress unused variable lint warning when a variable is read for side-effect avoidance
+- Gallery image click: add `onClick={() => navigate(...)}` and `cursor-pointer` class to the image container div
+- Pre-commit hook auto-fixes EOL on dist JS assets — always `git add -f dist/` and commit a second time after the hook fails first
+
+### Files Changed
+- `crates/server/frontend/src/pages/Detail.tsx` — new (~480 lines)
+- `crates/server/frontend/src/App.tsx` — added `Detail` import + route
+- `crates/server/frontend/src/pages/Gallery.tsx` — added `onClick` to image grid items
+- `crates/server/frontend/dist/` — rebuilt and force-committed
+
+### Test Results
+18 dman-server tests pass, 0 failures, `npm run build` exits 0.
+
+## T33: Python SDK — PyTorch Dataset + HF Datasets Loader
+
+### Key Findings
+- Files `crates/python/src/sdk/mod.rs` and `crates/python/src/sdk/loader.rs` were already created from prior task iteration
+- `lib.rs` needed only `pub mod sdk;` addition — no `#[pymodule]` fn exists in this crate (it's a library, not extension module)
+- PyO3 0.28: `PyObject` type is gone — use `Py<PyAny>` instead
+- PyO3 0.28: converting `Bound<'_, T>` to `Py<PyAny>` requires `.unbind().into_any()` (not `.into()`)
+- `#[pymethods]` methods are private from Rust test code — tests must access struct fields directly (made fields `pub(crate)`)
+- `#[derive(Debug)]` needed on `#[pyclass]` structs if tests use `.expect_err()`
+
+## T36: Label Studio API Integration (2026-04-04)
+
+- `reqwest 0.12` should use `default-features = false` with `rustls-tls` in this environment; the default native-tls path pulled in OpenSSL and broke build/test due missing system `openssl.pc`.
+- `LabelStudioClient` can stay sync-safe for CLI usage by using `reqwest::blocking::Client` plus `Authorization: Token <api_key>` headers.
+- Label Studio task fetch responses vary between bare arrays and paginated objects (`results` / `tasks`), so parsing should normalize both shapes before deserializing `Vec<LSTask>`.
+- LS rectangle labels use percentage coordinates; current import path converts them to pixel `BBox` values using fallback dimensions when no explicit image size is present.
+- CLI integration needed a direct `dman-server` dependency in `crates/cli/Cargo.toml` so `LabelStudioClient` could be reused instead of duplicating HTTP logic.
+- `embeddings.rs` had pre-existing type inference bug: `Ok(vecs)` in a closure with `?` needed `Ok::<Vec<Vec<f32>>, DmanError>(vecs)` explicit turbofish
+- `to_torch_dataset()` builds a Python class at runtime via `py.run()` with CStr — the code string must be a `CStr` (null-terminated)
+- Unused `let code = r#"..."#` variable existed alongside an inlined CStr literal — removed the dead variable
+
+### Files Changed
+- `crates/python/src/lib.rs` — added `pub mod sdk;`
+- `crates/python/src/sdk/mod.rs` — `pub mod loader;`
+- `crates/python/src/sdk/loader.rs` — full DmanDataset implementation with 5 tests
+- `crates/python/src/embeddings.rs` — fixed type inference bug (pre-existing)
+
+### Test Results
+22 dman-python tests pass (5 new sdk::loader tests), 0 failures.
+
+## T35: Python Embeddings Plugins (2026-04-04)
+
+### Key Findings
+- `compute_embeddings()` can keep a single `PyModule` alive inside one `Python::attach()` call, then reuse its `compute` function across all batches.
+- The embedding plugin should be validated from `dman_plugin`: require `type == "embeddings"` and use `name` as the `model_name` passed to `EmbeddingService::store()`.
+- Batch input should use `images.file_path`, not `file_name`, so Python plugins receive real filesystem paths.
+- `PyModule::from_code()` module names should be unique per plugin file; using the plugin path avoids cross-test module cache collisions.
+- CLI wiring for optional Python support worked cleanly by adding a `python` feature to `dman-cli` that forwards to `dman-python/python`.
+
+### Test Results
+- `cargo test -p dman-python --features python -- embeddings` passed.
+- `cargo build --workspace` passed.
+- `cargo build -p dman-cli --features python` passed.

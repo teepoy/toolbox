@@ -8,15 +8,6 @@ use dman_core::{
     error::{DmanError, Result},
 };
 
-/// Compute embeddings for all images in `dataset_id` using a Python plugin.
-///
-/// The plugin file must expose:
-/// ```python
-/// dman_plugin = {"name": "my-model", "type": "embeddings", ...}
-///
-/// def compute(image_paths: list[str]) -> list[list[float]]:
-///     ...
-/// ```
 #[cfg(feature = "python")]
 pub fn compute_embeddings(
     db: &Database,
@@ -42,8 +33,7 @@ pub fn compute_embeddings(
 
     let code_c = CString::new(code).map_err(|e| DmanError::PluginError(e.to_string()))?;
     let file_c = CString::new(path_str).map_err(|e| DmanError::PluginError(e.to_string()))?;
-    let mod_c =
-        CString::new("embeddings_plugin").map_err(|e| DmanError::PluginError(e.to_string()))?;
+    let mod_c = CString::new(path_str).map_err(|e| DmanError::PluginError(e.to_string()))?;
 
     let images: Vec<ImageRow> = {
         let mut stmt = db

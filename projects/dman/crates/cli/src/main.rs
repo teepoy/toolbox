@@ -8,6 +8,7 @@ use comfy_table::{Cell, Table};
 use dman_core::catalog::Catalog;
 use dman_core::dataset::DatasetService;
 use dman_core::types::DatasetFormat;
+use dman_server::label_studio::LabelStudioClient;
 
 #[derive(Parser)]
 #[command(
@@ -95,6 +96,19 @@ enum Commands {
         port: u16,
     },
 
+    LabelStudio {
+        #[command(subcommand)]
+        cmd: LsCommand,
+    },
+
+    Embed {
+        dataset_name: String,
+        #[arg(long)]
+        model: PathBuf,
+        #[arg(long, default_value = "32")]
+        batch_size: usize,
+    },
+
     /// Launch the terminal UI (not yet implemented)
     Tui,
 
@@ -102,6 +116,24 @@ enum Commands {
     Materialize {
         /// Dataset name
         name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum LsCommand {
+    Import {
+        url: String,
+        api_key: String,
+        project: i64,
+        name: String,
+    },
+    Export {
+        url: String,
+        api_key: String,
+        project: i64,
+        dataset: String,
+        #[arg(long, short, default_value = "8080")]
+        port: u16,
     },
 }
 
@@ -154,8 +186,32 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Operate => cmd_stub("operate"),
         Commands::Virtual => cmd_stub("virtual"),
         Commands::Serve { port } => cmd_serve_stub(port),
+        Commands::LabelStudio { cmd } => cmd_label_studio(cmd),
+        Commands::Embed {
+            dataset_name,
+            model,
+            batch_size,
+        } => cmd_embed(&dataset_name, &model, batch_size),
         Commands::Tui => cmd_stub("tui"),
         Commands::Materialize { name } => cmd_materialize_stub(&name),
+    }
+}
+
+fn cmd_label_studio(cmd: LsCommand) -> Result<()> {
+    match cmd {
+        LsCommand::Import {
+            url,
+            api_key,
+            project,
+            name,
+        } => cmd_label_studio_import(&url, &api_key, project, &name),
+        LsCommand::Export {
+            url,
+            api_key,
+            project,
+            dataset,
+            port,
+        } => cmd_label_studio_export(&url, &api_key, project, &dataset, port),
     }
 }
 
@@ -335,6 +391,93 @@ fn cmd_serve_stub(port: u16) -> Result<()> {
         "stub:".yellow().bold()
     );
     Ok(())
+}
+
+fn cmd_label_studio_import(url: &str, api_key: &str, project: i64, name: &str) -> Result<()> {
+    let catalog = open_catalog()?;
+    let client = LabelStudioClient::new(url, api_key);
+    let dataset = client
+        .import_project(project, catalog.db(), name)
+        .with_context(|| {
+            format!("failed to import Label Studio project {project} into '{name}'")
+        })?;
+
+    println!(
+        "{} Imported Label Studio project {} into dataset '{}' (id={})",
+        "✓".green().bold(),
+        project,
+        dataset.name.cyan(),
+        dataset.id
+    );
+
+    Ok(())
+}
+
+fn cmd_label_studio_export(
+    url: &str,
+    api_key: &str,
+    project: i64,
+    dataset: &str,
+    port: u16,
+) -> Result<()> {
+    let catalog = open_catalog()?;
+    let client = LabelStudioClient::new(url, api_key);
+    client
+        .export_to_project(catalog.db(), dataset, project, port)
+        .with_context(|| {
+            format!("failed to export dataset '{dataset}' to Label Studio project {project}")
+        })?;
+
+    println!(
+        "{} Exported dataset '{}' to Label Studio project {} using port {}",
+        "✓".green().bold(),
+        dataset.cyan(),
+        project,
+        port
+    );
+
+    Ok(())
+}
+
+fn cmd_embed(dataset_name: &str, model: &PathBuf, batch_size: usize) -> Result<()> {
+    let catalog = open_catalog()?;
+    let dataset = DatasetService::get(catalog.db(), dataset_name)
+        .with_context(|| format!("failed to find dataset '{dataset_name}'"))?;
+
+    #[cfg(feature = "python")]
+    {
+        let stored = dman_python::embeddings::compute_embeddings(
+            catalog.db(),
+            dataset.id,
+            model,
+            batch_size,
+        )
+        .with_context(|| {
+            format!(
+                "failed to compute embeddings for dataset '{}' using {}",
+                dataset_name,
+                model.display()
+            )
+        })?;
+
+        println!(
+            "{} Stored {} embeddings for dataset '{}' using {}",
+            "✓".green().bold(),
+            stored,
+            dataset.name.cyan(),
+            model.display().to_string().cyan()
+        );
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "python"))]
+    {
+        let _ = dataset;
+        let _ = model;
+        let _ = batch_size;
+        anyhow::bail!("python support is not enabled for this build")
+    }
 }
 
 fn cmd_materialize_stub(name: &str) -> Result<()> {

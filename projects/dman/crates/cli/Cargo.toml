@@ -3,10 +3,15 @@ name = "dman-cli"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+python = ["dman-python/python"]
+
 [dependencies]
 clap = { workspace = true }
 anyhow = { workspace = true }
 dman-core = { path = "../core" }
+dman-python = { path = "../python" }
+dman-server = { path = "../server" }
 comfy-table = "7"
 colored = "2"
 serde_json = { workspace = true }
