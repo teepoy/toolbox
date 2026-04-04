@@ -1,4 +1,5 @@
 pub mod api;
+pub mod label_studio;
 
 use std::sync::Arc;
 

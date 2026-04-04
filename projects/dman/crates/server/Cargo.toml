@@ -11,6 +11,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 rusqlite = { workspace = true }
 dman-core = { path = "../core" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls"] }
 dirs = "5"
 rust-embed = "8.11"
 mime_guess = "2"

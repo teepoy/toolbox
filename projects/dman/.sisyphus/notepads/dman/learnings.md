@@ -833,6 +833,7 @@ format!("{}_{:08x}.jpg", image_id, hash)
 - Label Studio task fetch responses vary between bare arrays and paginated objects (`results` / `tasks`), so parsing should normalize both shapes before deserializing `Vec<LSTask>`.
 - LS rectangle labels use percentage coordinates; current import path converts them to pixel `BBox` values using fallback dimensions when no explicit image size is present.
 - CLI integration needed a direct `dman-server` dependency in `crates/cli/Cargo.toml` so `LabelStudioClient` could be reused instead of duplicating HTTP logic.
+- `cargo test -p dman-server -- label_studio` passed once `reqwest` switched to rustls and the conversion tests stayed HTTP-mock-free.
 - `embeddings.rs` had pre-existing type inference bug: `Ok(vecs)` in a closure with `?` needed `Ok::<Vec<Vec<f32>>, DmanError>(vecs)` explicit turbofish
 - `to_torch_dataset()` builds a Python class at runtime via `py.run()` with CStr — the code string must be a `CStr` (null-terminated)
 - Unused `let code = r#"..."#` variable existed alongside an inlined CStr literal — removed the dead variable
