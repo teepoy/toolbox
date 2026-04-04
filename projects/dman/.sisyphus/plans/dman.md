@@ -690,7 +690,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/types/mod.rs`, `crates/core/src/lib.rs`
   - Pre-commit: `cargo test -p dman-core -- types`
 
-- [ ] 6. Dataset CRUD Operations
+- [x] 6. Dataset CRUD Operations
 
   **What to do**:
   - Create `crates/core/src/dataset/mod.rs` with `DatasetService` struct
@@ -770,7 +770,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/dataset/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- dataset`
 
-- [ ] 7. Schema System — TOML Parsing + Validation
+- [x] 7. Schema System — TOML Parsing + Validation
 
   **What to do**:
   - Create `crates/core/src/schema/mod.rs` with schema types and parser
@@ -873,7 +873,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/schema/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- schema`
 
-- [ ] 8. Image Storage Manager
+- [x] 8. Image Storage Manager
 
   **What to do**:
   - Create `crates/core/src/storage/mod.rs` with `StorageManager` struct
@@ -953,7 +953,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/storage/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- storage`
 
-- [ ] 9. Catalog Service (Global ~/.dman/ Management)
+- [x] 9. Catalog Service (Global ~/.dman/ Management)
 
   **What to do**:
   - Create `crates/core/src/catalog/mod.rs` with `Catalog` struct
@@ -1040,7 +1040,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/catalog/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- catalog`
 
-- [ ] 10. Configuration System
+- [x] 10. Configuration System
 
   **What to do**:
   - Create `crates/core/src/config/mod.rs` with `DmanConfig` struct

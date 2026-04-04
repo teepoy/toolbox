@@ -1,0 +1,42 @@
+Task T8: Image Storage Manager
+================================
+Date: 2026-04-04
+
+Files created/modified:
+  - crates/core/src/storage/mod.rs (created, 355 lines)
+  - crates/core/src/lib.rs (added `pub mod storage;`)
+  - crates/core/Cargo.toml (added `sha2 = "0.10"`)
+
+Test results:
+  cargo test -p dman-core -- storage
+  running 13 tests
+  test storage::tests::test_delete_nonexistent_image_is_ok ... ok
+  test storage::tests::test_get_image_path ... ok
+  test storage::tests::test_new_storage_manager ... ok
+  test storage::tests::test_delete_dataset_images ... ok
+  test storage::tests::test_calculate_hash_known_value ... ok
+  test storage::tests::test_delete_image ... ok
+  test storage::tests::test_delete_dataset_images_nonexistent_is_ok ... ok
+  test storage::tests::test_calculate_hash_deterministic ... ok
+  test storage::tests::test_store_image_copy ... ok
+  test storage::tests::test_store_image_reference ... ok
+  test storage::tests::test_store_image_symlink ... ok
+  test storage::tests::test_check_integrity_missing_file ... ok
+  test storage::tests::test_check_integrity_all_present ... ok
+  test result: ok. 13 passed; 0 failed; 0 ignored
+
+Commit: aa997a8 feat(core): implement file-based image storage manager
+
+Structs implemented:
+  - StorageManager { base_path: PathBuf }
+  - StorageStrategy { Copy, Symlink, Reference }
+  - IntegrityReport { total, ok, missing, corrupted }
+
+Methods:
+  - StorageManager::new(base_path) -> Self
+  - store_image(dataset_id, source_path, strategy) -> Result<PathBuf>
+  - get_image_path(dataset_id, file_name) -> PathBuf
+  - delete_image(stored_path) -> Result<()>
+  - delete_dataset_images(dataset_id) -> Result<()>
+  - calculate_hash(path) -> Result<String> (SHA256 hex, no hex crate needed)
+  - check_integrity(db, dataset_id) -> Result<IntegrityReport>

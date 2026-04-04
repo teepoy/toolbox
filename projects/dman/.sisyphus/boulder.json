@@ -7,7 +7,12 @@
     "ses_2a7e5e6d6ffeEQRyU0HNGdWJ4T",
     "ses_2a7e793bcffeUwlECLGv6eWaVs",
     "ses_2a7e709abffeJCzQfwEX2UGLVX",
-    "ses_2a7e65466ffeqP9KBom0qQOGA1"
+    "ses_2a7e65466ffeqP9KBom0qQOGA1",
+    "ses_2a7dc8a2dffeUE99xp4zik6ZZg",
+    "ses_2a7dccdf4ffegqv5FS9q0JJVqU",
+    "ses_2a7d3401dffe7vsdynsfqyU0sG",
+    "ses_2a7d30473ffe30T35nmhjyUDos",
+    "ses_2a7d2c35dffeuHEz9qXl5mpVfC"
   ],
   "plan_name": "dman",
   "agent": "atlas",
@@ -29,6 +34,15 @@
       "agent": "Sisyphus-Junior",
       "category": "quick",
       "updated_at": "2026-04-04T10:50:22.036Z"
+    },
+    "todo:6": {
+      "task_key": "todo:6",
+      "task_label": "6",
+      "task_title": "Dataset CRUD Operations",
+      "session_id": "ses_2a7d3401dffe7vsdynsfqyU0sG",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-04T11:10:45.794Z"
     }
   }
 }

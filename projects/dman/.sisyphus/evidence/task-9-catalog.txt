@@ -1,0 +1,36 @@
+Task: T9 — Catalog Service (Global ~/.dman/ Management)
+Date: 2026-04-04
+
+## Files Created/Modified
+- crates/core/src/catalog/mod.rs (created)
+- crates/core/src/lib.rs (added `pub mod catalog;`)
+- crates/core/Cargo.toml (added `dirs = "5"`, `sha2 = "0.10"`)
+
+## Test Results
+$ cargo test -p dman-core -- catalog
+
+running 6 tests
+test catalog::tests::home_path_falls_back_when_no_env_var ... ok
+test catalog::tests::home_path_uses_dman_home_env_var ... ok
+test catalog::tests::open_returns_error_when_not_initialized ... ok
+test catalog::tests::open_succeeds_after_init ... ok
+test catalog::tests::path_helpers_return_correct_paths ... ok
+test catalog::tests::init_creates_catalog_db_and_subdirs ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 68 filtered out; finished in 0.02s
+
+## Commit
+6b4905a feat(core): implement global catalog service
+
+## API Summary
+- Catalog::home_path() -> PathBuf  — static, $DMAN_HOME or ~/.dman
+- Catalog::init() -> Result<Catalog>  — creates dirs + catalog.db
+- Catalog::open() -> Result<Catalog>  — errors if catalog.db absent
+- Catalog::db(&self) -> &Database
+- Catalog::config_path(&self) -> PathBuf  — {home}/config.toml
+- Catalog::plugins_path(&self) -> PathBuf  — {home}/plugins/
+- Catalog::data_path(&self) -> PathBuf  — {home}/data/
+
+## Notes
+- Private init_at/open_at helpers used for test isolation (no env var races)
+- Pre-existing storage/mod.rs breakage (missing sha2 dep) was unblocked by adding sha2
