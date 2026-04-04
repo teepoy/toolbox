@@ -2,6 +2,7 @@ pub mod catalog;
 pub mod config;
 pub mod dataset;
 pub mod db;
+pub mod embeddings;
 pub mod error;
 pub mod formats;
 pub mod schema;
