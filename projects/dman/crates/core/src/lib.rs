@@ -8,6 +8,7 @@ pub mod formats;
 pub mod schema;
 pub mod storage;
 pub mod types;
+pub mod virtual_dataset;
 
 pub use error::{DmanError, Result};
 pub use types::{
