@@ -435,3 +435,36 @@ Since `Sample { ratio: f64 }` has no seed field, use `hash_id(id, 0)` with a con
 
 ### Test Results
 5 tests pass, 0 failures, 0 warnings.
+
+## T20: Dataset Operate Commands (CRUD ops) (2026-04-04)
+
+### Files Changed
+- `crates/core/src/ops/mod.rs` — new (~570 lines, 11 tests: rename, rename_not_found, rename_target_already_exists, duplicate_basic, duplicate_not_found, duplicate_target_exists, merge_two, merge_output_already_exists, split_two_way, split_invalid_ratios, split_three_way)
+- `crates/core/src/error.rs` — added `InvalidInput(String)` variant
+
+### Key Patterns
+
+**pre-existing `ops/mod.rs`**: The file existed with `pub mod transforms;` and a `transforms.rs` sibling. Replaced mod.rs entirely; transforms.rs becomes an orphan (not compiled since we dropped `pub mod transforms`).
+
+**`pub mod ops` already in lib.rs**: lib.rs already had it — no edit needed.
+
+**InvalidInput variant**: Was missing from DmanError — added it for ratios validation.
+
+**Transaction pattern** (confirmed working):
+```rust
+db.conn.execute("BEGIN IMMEDIATE", [])?;
+let result = (|| -> Result<T> { ... })();
+match result {
+    Ok(v) => { db.conn.execute("COMMIT", [])?; Ok(v) }
+    Err(e) => { let _ = db.conn.execute("ROLLBACK", []); Err(e) }
+}
+```
+
+**Deterministic split without FNV**: `std::collections::hash_map::DefaultHasher` + `(image_id as u64 ^ seed).hash(&mut hasher)` works well. Sort by hash, then assign using cumulative ratio thresholds with fractional position `(i + 0.5) / n`.
+
+**Inner structs in closures**: Defining `struct RawImage { ... }` inside a closure body is valid Rust and avoids polluting module namespace.
+
+**`ops/mod.rs` inline image/annotation copy pattern**: Prepare stmt → query_map → collect::<rusqlite::Result<Vec<_>>>() → .map_err(DmanError::Database) to avoid two-step error mapping.
+
+### Test Results
+11 ops tests pass, 173 total pass, 7 pre-existing patches failures (JPEG decode), 0 regressions.
