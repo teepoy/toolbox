@@ -535,3 +535,24 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 8 patches tests pass, 188 total tests pass, 0 failures.
+
+## T19: Materialize Command (2026-04-04)
+
+### Key Findings
+
+- `VirtualDatasetDef::SchemaTransform` field is `transforms: Vec<SchemaOp>` (not `ops` or `source + ops` as spec implied)
+- `StorageManager::base_path` is private — derive via probe trick: `storage.get_image_path(0, "__probe__")` returns `base_path/0/images/__probe__`; navigate `.parent().parent().parent()` to reach `base_path`, then append `datasets/{output_name}`
+- `DatasetService::register()` requires the path to exist on disk — must call `std::fs::create_dir_all` before inserting dataset record
+- `DatasetFormat::Custom` serializes to the string `"Custom"` in the DB
+- Rollback test: duplicate `output_name` triggers UNIQUE constraint → `DmanError::Database(_)` — clean way to test rollback without mocking
+- `VirtualDatasetService::evaluate()` handles `SchemaTransform` by passing images through unchanged; apply `SchemaTransformer::apply_to_images()` post-evaluate in the materialize step
+- Annotations copy pattern: local `RawAnnotation` struct inside the copy helper avoids namespace pollution
+- Transaction pattern (confirmed): `BEGIN IMMEDIATE` → closure → COMMIT or ROLLBACK + `fs::remove_dir_all` on failure
+- Pre-existing test count was 188 (in-module) + 3 (fixtures_test); after T19: 192 + 3 = 195 total
+
+### Files Changed
+- `crates/core/src/virtual_dataset/materialize.rs` — new (~430 lines, 4 tests)
+- `crates/core/src/virtual_dataset/mod.rs` — prepended `pub mod materialize;`
+
+### Test Results
+4 materialize tests pass, 192 total pass, 3 fixture tests pass, 0 failures.

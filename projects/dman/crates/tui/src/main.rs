@@ -365,7 +365,6 @@ mod tests {
     #[test]
     fn test_app_navigation_empty_datasets() {
         let mut app = App::new(vec![]);
-        // Should not panic on j/k with empty list
         handle_key(&mut app, key(KeyCode::Char('j')));
         handle_key(&mut app, key(KeyCode::Char('k')));
         assert_eq!(app.selected, 0);
