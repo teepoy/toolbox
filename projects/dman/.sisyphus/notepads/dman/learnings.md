@@ -665,3 +665,23 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 11 python tests pass, 250 total workspace tests pass, 0 failures.
+
+## T30: TUI Detail View + Keyboard Navigation (2026-04-04)
+
+### Key Findings
+
+- `View` enum with data in variant (`Detail { dataset_name, tab, scroll }`) is the cleanest way to model TUI state — no separate `current_view` field needed
+- Pattern matching on `app.view.clone()` in `handle_key` needed because borrowing `app` mutably in the match arm while also reading it causes borrow conflict — clone the view first
+- `Tabs::new(vec!["1:Info", "2:Images", ...]).select(tab).highlight_style(...)` is straightforward in ratatui 0.30
+- `KeyCode::Char('j') | KeyCode::Down if current_tab == 1` — guard patterns work well for tab-gated scroll logic
+- Scroll is stored in the View enum itself (not separately); avoids stale scroll on tab switch if desired
+- `rusqlite::params!` requires `use rusqlite::params;` — it's a macro not in prelude
+- `db.conn.prepare(...)?.query_map(params![id], |row| {...})?.filter_map(|r| r.ok()).collect()` — the `?`-chained pattern returns `Option<Vec<T>>` cleanly when wrapped in a block
+- Unit tests for View state: test App state directly, set `app.view` manually, no terminal needed
+- `DetailData` stored in `App` (not in `View` variant) to keep View enum cheap to clone
+
+### Files Changed
+- `crates/tui/src/main.rs` — extended from 372 → ~1030 lines, 10 new tests (18 total)
+
+### Test Results
+18 tests pass (8 existing + 10 new), 0 failures.

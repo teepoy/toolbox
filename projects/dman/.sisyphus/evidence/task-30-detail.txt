@@ -1,0 +1,50 @@
+T30 — TUI Detail View + Keyboard Navigation
+Evidence collected: 2026-04-04
+
+BUILD:
+  cargo build -p dman-tui → Finished successfully (0 errors, 0 warnings)
+
+TESTS:
+  cargo test -p dman-tui → 18 passed; 0 failed
+
+TEST NAMES:
+  Existing (8):
+    test_app_initial_state
+    test_app_quit
+    test_app_quit_uppercase
+    test_app_navigation
+    test_app_navigation_arrow_keys
+    test_app_navigation_no_overflow_down
+    test_app_navigation_no_overflow_up
+    test_app_navigation_empty_datasets
+
+  New (10):
+    test_enter_navigates_to_detail
+    test_enter_on_empty_list_stays_in_list
+    test_esc_returns_to_list
+    test_backspace_returns_to_list
+    test_tab_cycles_tabs
+    test_number_keys_switch_tabs
+    test_scroll_in_images_tab
+    test_scroll_only_in_images_tab
+    test_ctrl_r_in_detail_clears_detail_data
+    test_quit_from_detail_view
+
+CHANGES:
+  crates/tui/src/main.rs:
+    - Added View enum with List and Detail { dataset_name, tab, scroll } variants
+    - Added DetailData struct for cached DB data
+    - Expanded App struct with view: View and detail_data: Option<DetailData>
+    - Refactored handle_key() to dispatch to handle_key_list / handle_key_detail
+    - handle_key_list: Enter → Detail view with data load
+    - handle_key_detail: Esc/Backspace → List; Tab/1-4 → tab switch; j/k/Down/Up → scroll (images tab only); Ctrl+R → refresh; q/Q → quit
+    - Refactored ui() to dispatch draw_list() / draw_detail()
+    - draw_list(): preserved original list + sidebar view
+    - draw_detail(): 4-area layout (title, tabs widget, content, status)
+    - draw_detail_info(): name, path, format, image count, annotation count, created date
+    - draw_detail_images(): scrollable list with filename + annotation count
+    - draw_detail_categories(): category names
+    - draw_detail_schema(): schema text or "No schema defined"
+    - open_catalog_db() / load_datasets() / load_detail() for DB access
+    - load_detail() uses DatasetService::inspect() + direct SQL for images with annotation counts
+    - All graceful degradation (Option<DetailData>, None on any error)

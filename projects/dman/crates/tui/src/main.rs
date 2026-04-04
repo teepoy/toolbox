@@ -4,14 +4,35 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs},
     Frame,
 };
+
+#[derive(Debug, Clone, PartialEq)]
+enum View {
+    List,
+    Detail {
+        dataset_name: String,
+        tab: usize,
+        scroll: usize,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct DetailData {
+    image_count: u64,
+    annotation_count: u64,
+    categories: Vec<String>,
+    images: Vec<(String, u64)>,
+    schema_text: Option<String>,
+}
 
 struct App {
     datasets: Vec<Dataset>,
     selected: usize,
     should_quit: bool,
+    view: View,
+    detail_data: Option<DetailData>,
 }
 
 impl App {
@@ -20,11 +41,27 @@ impl App {
             datasets,
             selected: 0,
             should_quit: false,
+            view: View::List,
+            detail_data: None,
+        }
+    }
+
+    fn load_detail_data(&mut self) {
+        if let View::Detail { dataset_name, .. } = &self.view {
+            let name = dataset_name.clone();
+            self.detail_data = load_detail(&name);
         }
     }
 }
 
 fn handle_key(app: &mut App, key: KeyEvent) {
+    match &app.view.clone() {
+        View::List => handle_key_list(app, key),
+        View::Detail { tab, scroll, .. } => handle_key_detail(app, key, *tab, *scroll),
+    }
+}
+
+fn handle_key_list(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('q') | KeyCode::Char('Q') => {
             app.should_quit = true;
@@ -42,14 +79,121 @@ fn handle_key(app: &mut App, key: KeyEvent) {
                 app.selected -= 1;
             }
         }
+        KeyCode::Enter => {
+            if !app.datasets.is_empty() {
+                let name = app.datasets[app.selected].name.clone();
+                app.view = View::Detail {
+                    dataset_name: name,
+                    tab: 0,
+                    scroll: 0,
+                };
+                app.detail_data = None;
+                app.load_detail_data();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn handle_key_detail(app: &mut App, key: KeyEvent, current_tab: usize, current_scroll: usize) {
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('r') {
+        app.detail_data = None;
+        app.load_detail_data();
+        return;
+    }
+
+    match key.code {
+        KeyCode::Esc | KeyCode::Backspace => {
+            app.view = View::List;
+            app.detail_data = None;
+        }
+        KeyCode::Char('q') | KeyCode::Char('Q') => {
+            app.should_quit = true;
+        }
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.should_quit = true;
+        }
+        KeyCode::Tab => {
+            if let View::Detail {
+                dataset_name,
+                scroll,
+                ..
+            } = &app.view
+            {
+                let new_tab = (current_tab + 1) % 4;
+                app.view = View::Detail {
+                    dataset_name: dataset_name.clone(),
+                    tab: new_tab,
+                    scroll: *scroll,
+                };
+            }
+        }
+        KeyCode::Char(c) if ('1'..='4').contains(&c) => {
+            let idx = (c as usize) - ('1' as usize);
+            if let View::Detail {
+                dataset_name,
+                scroll,
+                ..
+            } = &app.view
+            {
+                app.view = View::Detail {
+                    dataset_name: dataset_name.clone(),
+                    tab: idx,
+                    scroll: *scroll,
+                };
+            }
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            if current_tab == 1 {
+                let max_scroll = app
+                    .detail_data
+                    .as_ref()
+                    .map(|d| d.images.len().saturating_sub(1))
+                    .unwrap_or(0);
+                if let View::Detail {
+                    dataset_name, tab, ..
+                } = &app.view
+                {
+                    app.view = View::Detail {
+                        dataset_name: dataset_name.clone(),
+                        tab: *tab,
+                        scroll: (current_scroll + 1).min(max_scroll),
+                    };
+                }
+            }
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if current_tab == 1 {
+                if let View::Detail {
+                    dataset_name, tab, ..
+                } = &app.view
+                {
+                    app.view = View::Detail {
+                        dataset_name: dataset_name.clone(),
+                        tab: *tab,
+                        scroll: current_scroll.saturating_sub(1),
+                    };
+                }
+            }
+        }
         _ => {}
     }
 }
 
 fn ui(f: &mut Frame, app: &App) {
+    match &app.view {
+        View::List => draw_list(f, app),
+        View::Detail {
+            dataset_name,
+            tab,
+            scroll,
+        } => draw_detail(f, app, dataset_name, *tab, *scroll),
+    }
+}
+
+fn draw_list(f: &mut Frame, app: &App) {
     let area = f.area();
 
-    // Outer vertical split: title bar (1 line) / main area / status bar (1 line)
     let outer_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -203,24 +347,340 @@ fn ui(f: &mut Frame, app: &App) {
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw("Select"),
+        Span::raw("Detail"),
     ]))
     .block(Block::new().borders(Borders::ALL));
     f.render_widget(status, outer_chunks[2]);
 }
 
-fn load_datasets() -> Vec<Dataset> {
+fn draw_detail(f: &mut Frame, app: &App, dataset_name: &str, tab: usize, scroll: usize) {
+    let area = f.area();
+
+    let dataset = app.datasets.iter().find(|d| d.name == dataset_name);
+
+    let outer_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    let title = Paragraph::new(Line::from(vec![
+        Span::styled(
+            "dman",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" — "),
+        Span::styled(
+            dataset_name,
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]))
+    .block(Block::new().borders(Borders::ALL));
+    f.render_widget(title, outer_chunks[0]);
+
+    let tab_titles = vec!["1:Info", "2:Images", "3:Categories", "4:Schema"];
+    let tabs = Tabs::new(tab_titles)
+        .select(tab)
+        .style(Style::default().fg(Color::DarkGray))
+        .highlight_style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(Block::new().borders(Borders::ALL));
+    f.render_widget(tabs, outer_chunks[1]);
+
+    match tab {
+        0 => draw_detail_info(f, app, dataset, outer_chunks[2]),
+        1 => draw_detail_images(f, app, outer_chunks[2], scroll),
+        2 => draw_detail_categories(f, app, outer_chunks[2]),
+        3 => draw_detail_schema(f, app, dataset, outer_chunks[2]),
+        _ => {}
+    }
+
+    let status = Paragraph::new(Line::from(vec![
+        Span::styled(
+            " [Esc] ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Back  "),
+        Span::styled(
+            "[Tab/1-4] ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Switch Tab  "),
+        Span::styled(
+            "[↑/↓] ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Scroll (Images)  "),
+        Span::styled(
+            "[Ctrl+R] ",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Refresh"),
+    ]))
+    .block(Block::new().borders(Borders::ALL));
+    f.render_widget(status, outer_chunks[3]);
+}
+
+fn draw_detail_info(
+    f: &mut Frame,
+    app: &App,
+    dataset: Option<&Dataset>,
+    area: ratatui::layout::Rect,
+) {
+    let lines = if let Some(ds) = dataset {
+        let format_str = match &ds.format {
+            dman_core::types::DatasetFormat::Yolo => "YOLO".to_string(),
+            dman_core::types::DatasetFormat::Coco => "COCO".to_string(),
+            dman_core::types::DatasetFormat::HuggingFace => "HuggingFace".to_string(),
+            dman_core::types::DatasetFormat::Custom(s) => s.clone(),
+        };
+
+        let (image_count_str, annotation_count_str) = if let Some(ref data) = app.detail_data {
+            (
+                data.image_count.to_string(),
+                data.annotation_count.to_string(),
+            )
+        } else {
+            ("loading...".to_string(), "loading...".to_string())
+        };
+
+        vec![
+            Line::from(vec![
+                Span::styled("  Name:         ", Style::default().fg(Color::Cyan)),
+                Span::raw(ds.name.clone()),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Path:         ", Style::default().fg(Color::Cyan)),
+                Span::raw(ds.path.to_string_lossy().to_string()),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Format:       ", Style::default().fg(Color::Cyan)),
+                Span::raw(format_str),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Images:       ", Style::default().fg(Color::Cyan)),
+                Span::raw(image_count_str),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Annotations:  ", Style::default().fg(Color::Cyan)),
+                Span::raw(annotation_count_str),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Created:      ", Style::default().fg(Color::Cyan)),
+                Span::raw(ds.created_at.clone()),
+            ]),
+        ]
+    } else {
+        vec![Line::from(Span::styled(
+            "Dataset not found",
+            Style::default().fg(Color::Red),
+        ))]
+    };
+
+    let paragraph = Paragraph::new(lines)
+        .block(
+            Block::new()
+                .title(" Info ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green)),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: false });
+    f.render_widget(paragraph, area);
+}
+
+fn draw_detail_images(f: &mut Frame, app: &App, area: ratatui::layout::Rect, scroll: usize) {
+    let items: Vec<ListItem> = if let Some(ref data) = app.detail_data {
+        if data.images.is_empty() {
+            vec![ListItem::new(Span::styled(
+                " No images in this dataset.",
+                Style::default().fg(Color::DarkGray),
+            ))]
+        } else {
+            data.images
+                .iter()
+                .skip(scroll)
+                .map(|(fname, ann_count)| {
+                    ListItem::new(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(fname, Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw("  "),
+                        Span::styled(
+                            format!("[{} ann]", ann_count),
+                            Style::default().fg(Color::Yellow),
+                        ),
+                    ]))
+                })
+                .collect()
+        }
+    } else {
+        vec![ListItem::new(Span::styled(
+            " Loading images...",
+            Style::default().fg(Color::DarkGray),
+        ))]
+    };
+
+    let list = List::new(items).block(
+        Block::new()
+            .title(" Images ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Blue)),
+    );
+    f.render_widget(list, area);
+}
+
+fn draw_detail_categories(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+    let items: Vec<ListItem> = if let Some(ref data) = app.detail_data {
+        if data.categories.is_empty() {
+            vec![ListItem::new(Span::styled(
+                " No categories defined.",
+                Style::default().fg(Color::DarkGray),
+            ))]
+        } else {
+            data.categories
+                .iter()
+                .map(|cat| {
+                    ListItem::new(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(cat, Style::default().add_modifier(Modifier::BOLD)),
+                    ]))
+                })
+                .collect()
+        }
+    } else {
+        vec![ListItem::new(Span::styled(
+            " Loading categories...",
+            Style::default().fg(Color::DarkGray),
+        ))]
+    };
+
+    let list = List::new(items).block(
+        Block::new()
+            .title(" Categories ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Magenta)),
+    );
+    f.render_widget(list, area);
+}
+
+fn draw_detail_schema(
+    f: &mut Frame,
+    app: &App,
+    dataset: Option<&Dataset>,
+    area: ratatui::layout::Rect,
+) {
+    let content = if let Some(ref data) = app.detail_data {
+        if let Some(ref schema_text) = data.schema_text {
+            schema_text.clone()
+        } else {
+            "No schema defined".to_string()
+        }
+    } else if let Some(ds) = dataset {
+        if ds.schema_path.is_some() {
+            "Loading schema...".to_string()
+        } else {
+            "No schema defined".to_string()
+        }
+    } else {
+        "No schema defined".to_string()
+    };
+
+    let paragraph = Paragraph::new(content)
+        .block(
+            Block::new()
+                .title(" Schema ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: false });
+    f.render_widget(paragraph, area);
+}
+
+fn open_catalog_db() -> Option<Database> {
     let home = std::env::var("DMAN_HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".dman"));
     let catalog = home.join("catalog.db");
     if !catalog.exists() {
-        return vec![];
+        return None;
     }
-    let Ok(db) = Database::open(&catalog) else {
-        return vec![];
+    Database::open(&catalog).ok()
+}
+
+fn load_datasets() -> Vec<Dataset> {
+    let db = match open_catalog_db() {
+        Some(db) => db,
+        None => return vec![],
     };
     DatasetService::list(&db).unwrap_or_default()
+}
+
+fn load_detail(dataset_name: &str) -> Option<DetailData> {
+    let db = open_catalog_db()?;
+
+    let info = DatasetService::inspect(&db, dataset_name).ok()?;
+    let dataset_id = info.dataset.id;
+
+    let images: Vec<(String, u64)> = {
+        let mut stmt = db
+            .conn
+            .prepare(
+                "SELECT i.file_name, COUNT(a.id) as ann_count \
+                 FROM images i \
+                 LEFT JOIN annotations a ON a.image_id = i.id \
+                 WHERE i.dataset_id = ?1 \
+                 GROUP BY i.id \
+                 ORDER BY i.file_name",
+            )
+            .ok()?;
+        stmt.query_map(rusqlite::params![dataset_id], |row| {
+            let fname: String = row.get(0)?;
+            let cnt: i64 = row.get(1)?;
+            Ok((fname, cnt as u64))
+        })
+        .ok()?
+        .filter_map(|r| r.ok())
+        .collect()
+    };
+
+    let schema_text = info
+        .dataset
+        .schema_path
+        .as_ref()
+        .and_then(|p| std::fs::read_to_string(p).ok());
+
+    let categories: Vec<String> = info.categories.iter().map(|c| c.name.clone()).collect();
+
+    Some(DetailData {
+        image_count: info.image_count,
+        annotation_count: info.annotation_count,
+        categories,
+        images,
+        schema_text,
+    })
 }
 
 fn main() -> anyhow::Result<()> {
@@ -288,12 +748,17 @@ mod tests {
         KeyEvent::new(code, KeyModifiers::empty())
     }
 
+    fn ctrl_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::CONTROL)
+    }
+
     #[test]
     fn test_app_initial_state() {
         let app = App::new(vec![]);
         assert_eq!(app.selected, 0);
         assert!(!app.should_quit);
         assert!(app.datasets.is_empty());
+        assert_eq!(app.view, View::List);
     }
 
     #[test]
@@ -368,5 +833,192 @@ mod tests {
         handle_key(&mut app, key(KeyCode::Char('j')));
         handle_key(&mut app, key(KeyCode::Char('k')));
         assert_eq!(app.selected, 0);
+    }
+
+    #[test]
+    fn test_enter_navigates_to_detail() {
+        let datasets = vec![make_dataset(1, "my_dataset")];
+        let mut app = App::new(datasets);
+
+        handle_key(&mut app, key(KeyCode::Enter));
+
+        assert!(
+            matches!(&app.view, View::Detail { dataset_name, tab: 0, scroll: 0 } if dataset_name == "my_dataset"),
+            "Expected Detail view with dataset_name=my_dataset, tab=0, scroll=0, got {:?}",
+            app.view
+        );
+    }
+
+    #[test]
+    fn test_enter_on_empty_list_stays_in_list() {
+        let mut app = App::new(vec![]);
+        handle_key(&mut app, key(KeyCode::Enter));
+        assert_eq!(
+            app.view,
+            View::List,
+            "Enter on empty list should not change view"
+        );
+    }
+
+    #[test]
+    fn test_esc_returns_to_list() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 0,
+            scroll: 0,
+        };
+
+        handle_key(&mut app, key(KeyCode::Esc));
+        assert_eq!(app.view, View::List);
+    }
+
+    #[test]
+    fn test_backspace_returns_to_list() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 2,
+            scroll: 0,
+        };
+
+        handle_key(&mut app, key(KeyCode::Backspace));
+        assert_eq!(app.view, View::List);
+    }
+
+    #[test]
+    fn test_tab_cycles_tabs() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 0,
+            scroll: 0,
+        };
+
+        handle_key(&mut app, key(KeyCode::Tab));
+        assert!(matches!(&app.view, View::Detail { tab: 1, .. }));
+
+        handle_key(&mut app, key(KeyCode::Tab));
+        assert!(matches!(&app.view, View::Detail { tab: 2, .. }));
+
+        handle_key(&mut app, key(KeyCode::Tab));
+        assert!(matches!(&app.view, View::Detail { tab: 3, .. }));
+
+        handle_key(&mut app, key(KeyCode::Tab));
+        assert!(matches!(&app.view, View::Detail { tab: 0, .. }));
+    }
+
+    #[test]
+    fn test_number_keys_switch_tabs() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 0,
+            scroll: 0,
+        };
+
+        handle_key(&mut app, key(KeyCode::Char('3')));
+        assert!(matches!(&app.view, View::Detail { tab: 2, .. }));
+
+        handle_key(&mut app, key(KeyCode::Char('1')));
+        assert!(matches!(&app.view, View::Detail { tab: 0, .. }));
+
+        handle_key(&mut app, key(KeyCode::Char('4')));
+        assert!(matches!(&app.view, View::Detail { tab: 3, .. }));
+
+        handle_key(&mut app, key(KeyCode::Char('2')));
+        assert!(matches!(&app.view, View::Detail { tab: 1, .. }));
+    }
+
+    #[test]
+    fn test_scroll_in_images_tab() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 1,
+            scroll: 0,
+        };
+        app.detail_data = Some(DetailData {
+            image_count: 3,
+            annotation_count: 5,
+            categories: vec![],
+            images: vec![
+                ("a.jpg".to_string(), 1),
+                ("b.jpg".to_string(), 2),
+                ("c.jpg".to_string(), 0),
+            ],
+            schema_text: None,
+        });
+
+        handle_key(&mut app, key(KeyCode::Char('j')));
+        assert!(matches!(&app.view, View::Detail { scroll: 1, .. }));
+
+        handle_key(&mut app, key(KeyCode::Down));
+        assert!(matches!(&app.view, View::Detail { scroll: 2, .. }));
+
+        handle_key(&mut app, key(KeyCode::Char('j')));
+        assert!(matches!(&app.view, View::Detail { scroll: 2, .. }));
+
+        handle_key(&mut app, key(KeyCode::Char('k')));
+        assert!(matches!(&app.view, View::Detail { scroll: 1, .. }));
+    }
+
+    #[test]
+    fn test_scroll_only_in_images_tab() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 0,
+            scroll: 0,
+        };
+        handle_key(&mut app, key(KeyCode::Char('j')));
+        assert!(
+            matches!(&app.view, View::Detail { scroll: 0, .. }),
+            "scroll should not change in Info tab"
+        );
+    }
+
+    #[test]
+    fn test_ctrl_r_in_detail_clears_detail_data() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 0,
+            scroll: 0,
+        };
+        app.detail_data = Some(DetailData {
+            image_count: 1,
+            annotation_count: 0,
+            categories: vec![],
+            images: vec![],
+            schema_text: None,
+        });
+
+        handle_key(&mut app, ctrl_key(KeyCode::Char('r')));
+        assert!(
+            matches!(&app.view, View::Detail { .. }),
+            "Ctrl+R should stay in Detail view"
+        );
+    }
+
+    #[test]
+    fn test_quit_from_detail_view() {
+        let datasets = vec![make_dataset(1, "ds1")];
+        let mut app = App::new(datasets);
+        app.view = View::Detail {
+            dataset_name: "ds1".to_string(),
+            tab: 0,
+            scroll: 0,
+        };
+
+        handle_key(&mut app, key(KeyCode::Char('q')));
+        assert!(app.should_quit);
     }
 }
