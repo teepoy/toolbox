@@ -1,7 +1,10 @@
+pub mod catalog;
+pub mod config;
 pub mod dataset;
 pub mod db;
 pub mod error;
 pub mod schema;
+pub mod storage;
 pub mod types;
 
 pub use error::{DmanError, Result};
