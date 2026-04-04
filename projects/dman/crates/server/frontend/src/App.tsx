@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
+import Gallery from './pages/Gallery'
 import './App.css'
 
 function Home() {
@@ -7,15 +8,6 @@ function Home() {
       <h1 className="text-4xl font-bold text-gray-900 dark:text-white">dman</h1>
       <p className="text-lg text-gray-600 dark:text-gray-300">Dataset Manager</p>
       <p className="text-sm text-gray-400">Manage your image datasets with ease.</p>
-    </div>
-  )
-}
-
-function Datasets() {
-  return (
-    <div className="p-8">
-      <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Datasets</h2>
-      <p className="text-gray-600 dark:text-gray-300">Your datasets will appear here.</p>
     </div>
   )
 }
@@ -54,8 +46,8 @@ export default function App() {
         <Nav />
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/datasets" element={<Datasets />} />
-          <Route path="/datasets/:name" element={<Datasets />} />
+          <Route path="/datasets" element={<Gallery />} />
+          <Route path="/datasets/:name" element={<Gallery />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<Home />} />
         </Routes>
