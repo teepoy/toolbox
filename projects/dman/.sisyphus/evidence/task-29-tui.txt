@@ -1,0 +1,29 @@
+## T29 TUI Evidence
+
+### Task
+Implement ratatui dataset browser TUI in crates/tui/src/main.rs
+
+### Build Result
+```
+cargo build -p dman-tui
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.51s
+```
+
+### Test Result
+```
+cargo test -p dman-tui
+running 8 tests
+test tests::test_app_initial_state ... ok
+test tests::test_app_navigation_empty_datasets ... ok
+test tests::test_app_navigation ... ok
+test tests::test_app_navigation_no_overflow_down ... ok
+test tests::test_app_navigation_arrow_keys ... ok
+test tests::test_app_navigation_no_overflow_up ... ok
+test tests::test_app_quit ... ok
+test tests::test_app_quit_uppercase ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+### Files Changed
+- crates/tui/Cargo.toml — added dman-core, anyhow, dirs deps
+- crates/tui/src/main.rs — full ratatui TUI implementation (373 lines, 8 tests)

@@ -575,3 +575,23 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 13 API tests pass, 18 total server tests pass (5 pre-existing + 13 new), 0 regressions.
+
+## T29: TUI Shell — Ratatui Dataset Browser (2026-04-04)
+
+### Key Findings
+
+- ratatui 0.30 + crossterm 0.28 were already in workspace deps; only needed `dman-core`, `anyhow`, `dirs` added to `crates/tui/Cargo.toml`
+- `ratatui::widgets::ListState::default()` + `state.select(Some(index))` then `f.render_stateful_widget(list, area, &mut state)` for highlighted list navigation
+- `load_datasets()` pattern: check catalog.db exists first, then `let Ok(db) = Database::open(&catalog) else { return vec![]; }` — graceful degradation without needing error type coercion
+- `DatasetService::list(&db).unwrap_or_default()` returns empty Vec on any error — safe for TUI startup
+- Unit tests for TUI: no terminal interaction needed — test `App` state and `handle_key()` directly with `KeyEvent::new(code, KeyModifiers::empty())`
+- crossterm 0.29 was compiled alongside 0.28 (workspace) — ratatui 0.30 uses crossterm 0.29 internally but this doesn't cause issues; the `ratatui-crossterm` crate bridges them
+- Pre-commit hook auto-committed TUI files as part of a prior hook-fixed commit — files were in HEAD before explicit commit attempt
+- `run_app` extracted as separate fn to allow clean terminal restore on error: `let result = run_app(...); disable_raw_mode()?; leave_alternate_screen()?; result`
+
+### Files Changed
+- `crates/tui/Cargo.toml` — added dman-core, anyhow, dirs
+- `crates/tui/src/main.rs` — full ratatui TUI (373 lines, 8 tests)
+
+### Test Results
+8 tests pass, 0 failures.
