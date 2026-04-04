@@ -230,3 +230,26 @@ let paths: Vec<String> = stmt
 - `crates/cli/Cargo.toml` — added dman-core, comfy-table, colored, serde_json, anyhow deps
 - `crates/cli/src/main.rs` — full clap derive CLI (~355 lines)
 - `crates/cli/tests/cli.rs` — 8 integration tests (all pass)
+
+## T13: YOLO Format Importer/Exporter (2026-04-04)
+
+### Key Findings
+
+- `formats/mod.rs` was already modified by other tasks — had `pub mod huggingface;` prepended. Always re-read before editing.
+- `walkdir` was already in `dman-core`'s `Cargo.toml` (added by a prior task). Re-check before adding deps.
+- YOLO `names` field supports two YAML forms: `["cat","dog"]` (list) and `{0: cat, 1: dog}` (map). Handle both with an untagged enum + `into_sorted_vec()`.
+- labels dir derivation: strip first path component of `train` subdir and prepend `labels/` — `images/train` → `labels/train`. Use `components().skip(1).collect::<PathBuf>()`.
+- `DataYaml.path` field is present in YOLO format but unused by our importer; suppress dead_code warning with `#[allow(dead_code)]` on the field.
+- Transaction pattern: `BEGIN IMMEDIATE` outside closure, run logic in `(|| -> Result<()> { ... })()`, then COMMIT or ROLLBACK based on result.
+- `db.conn.last_insert_rowid()` is the right way to get newly inserted image_id.
+- WalkDir `min_depth(1).max_depth(1).sort_by_file_name()` gives deterministic file enumeration without recursion.
+- Bbox stored as `{"x": cx, "y": cy, "w": w, "h": h, "normalized": true}` — raw YOLO values, no pixel conversion.
+- Missing label file: simply skip the annotation loop (don't error).
+- Export: use `fs::copy` for image files; write label lines as `"class_idx x y w h"`.
+
+### Files Changed
+- `crates/core/src/formats/yolo/mod.rs` — new (340 lines, 11 tests)
+- `crates/core/src/formats/mod.rs` — added `pub mod yolo;`
+
+### Test Results
+11 tests pass, 0 failures, 0 warnings.

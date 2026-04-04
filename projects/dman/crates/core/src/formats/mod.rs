@@ -1,14 +1,6 @@
-//! Generic format trait and plugin interface for dataset import/export.
-//!
-//! This module defines the [`FormatImporter`] and [`FormatExporter`] traits
-//! that all format plugins must implement, as well as a [`FormatRegistry`]
-//! for registering and looking up format implementations.
-//!
-//! # Detection heuristics (to be implemented in real plugins):
-//! - YOLO: directory contains a `data.yaml` file
-//! - COCO: directory contains an `annotations/` subdirectory with `.json` files
-//! - HuggingFace: directory contains `.parquet` files
-
+pub mod coco;
+pub mod huggingface;
+pub mod yolo;
 use std::path::Path;
 
 use crate::db::Database;
@@ -127,11 +119,11 @@ impl FormatRegistry {
         registry.register_importer(Box::new(YoloStubImporter));
         registry.register_exporter(Box::new(YoloStubExporter));
 
-        registry.register_importer(Box::new(CocoStubImporter));
-        registry.register_exporter(Box::new(CocoStubExporter));
+        registry.register_importer(Box::new(coco::CocoImporter));
+        registry.register_exporter(Box::new(coco::CocoExporter));
 
-        registry.register_importer(Box::new(HuggingFaceStubImporter));
-        registry.register_exporter(Box::new(HuggingFaceStubExporter));
+        registry.register_importer(Box::new(huggingface::HuggingFaceImporter));
+        registry.register_exporter(Box::new(huggingface::HuggingFaceExporter));
 
         registry
     }
@@ -240,57 +232,6 @@ impl FormatExporter for CocoStubExporter {
     ) -> Result<()> {
         Err(crate::DmanError::FormatUnsupported(
             "COCO exporter not yet implemented (T13)".to_string(),
-        ))
-    }
-}
-
-/// HuggingFace stub importer.
-///
-/// Detection heuristic: the directory at `path` contains one or more
-/// `.parquet` files.
-struct HuggingFaceStubImporter;
-
-impl FormatImporter for HuggingFaceStubImporter {
-    fn name(&self) -> &str {
-        "huggingface"
-    }
-
-    /// Returns `false` — real detection is implemented in the T14 HuggingFace
-    /// importer.
-    fn detect(&self, _path: &Path) -> bool {
-        false
-    }
-
-    fn import(
-        &self,
-        _db: &Database,
-        _storage: &StorageManager,
-        _path: &Path,
-        _dataset_name: &str,
-    ) -> Result<Dataset> {
-        Err(crate::DmanError::FormatUnsupported(
-            "HuggingFace importer not yet implemented (T14)".to_string(),
-        ))
-    }
-}
-
-/// HuggingFace stub exporter.
-struct HuggingFaceStubExporter;
-
-impl FormatExporter for HuggingFaceStubExporter {
-    fn name(&self) -> &str {
-        "huggingface"
-    }
-
-    fn export(
-        &self,
-        _db: &Database,
-        _storage: &StorageManager,
-        _dataset: &Dataset,
-        _output_path: &Path,
-    ) -> Result<()> {
-        Err(crate::DmanError::FormatUnsupported(
-            "HuggingFace exporter not yet implemented (T14)".to_string(),
         ))
     }
 }

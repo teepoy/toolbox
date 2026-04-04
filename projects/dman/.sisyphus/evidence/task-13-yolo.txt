@@ -1,0 +1,35 @@
+T13: YOLO Format Importer/Exporter
+===================================
+
+Status: COMPLETE
+Date: 2026-04-04
+
+Files Created/Modified:
+- crates/core/src/formats/yolo/mod.rs  [CREATED]
+- crates/core/src/formats/mod.rs       [MODIFIED — added pub mod yolo;]
+
+Test Results:
+  cargo test -p dman-core -- formats::yolo
+  11 passed; 0 failed
+
+Tests:
+  test_yolo_detects_fixture_dir          OK
+  test_yolo_detect_returns_false_for_non_yolo_dir  OK
+  test_import_yolo_fixture               OK  (3 images imported)
+  test_import_yolo_fixture_annotations   OK  (4 total annotations)
+  test_import_yolo_categories            OK  (2 categories: cat, dog)
+  test_missing_label_file_ok             OK  (0 annotations, no error)
+  test_export_creates_structure          OK
+  test_export_data_yaml_has_correct_classes  OK
+  test_export_writes_label_files         OK  (img003.txt has 2 lines)
+  test_importer_name                     OK
+  test_exporter_name                     OK
+
+Implementation Notes:
+- YoloImporter.detect(): checks path.is_dir() && path/data.yaml exists
+- DataYaml deserialized via serde_yaml; names supports both list and map forms
+- labels dir derived by replacing first path component: images/train → labels/train
+- Bbox stored as JSON: {"x": cx, "y": cy, "w": w, "h": h, "normalized": true}
+- Transaction: BEGIN IMMEDIATE / COMMIT / ROLLBACK on error
+- Missing label file → 0 annotations (not error)
+- WalkDir with min_depth=1 max_depth=1 + sort_by_file_name for deterministic order
