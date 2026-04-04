@@ -3,6 +3,7 @@ pub mod config;
 pub mod dataset;
 pub mod db;
 pub mod error;
+pub mod formats;
 pub mod schema;
 pub mod storage;
 pub mod types;

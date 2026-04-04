@@ -164,3 +164,20 @@ let paths: Vec<String> = stmt
 
 ### Cargo.toml already had `dirs = "5"`
 - Re-read Cargo.toml before editing — other tasks may have added deps
+
+## T15: Generic Format Trait + Plugin Interface (2026-04-04)
+
+### Design Decisions
+
+- `detect` must be `fn detect(&self, path: &Path) -> bool` (method, not associated function) because `FormatImporter` is used as a trait object `Box<dyn FormatImporter>` — associated functions (`where Self: Sized`) cannot be called on trait objects.
+- `Default for FormatRegistry` delegates to `FormatRegistry::new()` (empty registry); callers who want pre-populated stubs call `FormatRegistry::default_registry()`.
+- Stub implementations use `DmanError::FormatUnsupported` (not a `NotImplemented` variant that doesn't exist) for their `import`/`export` error returns.
+- Detection heuristics (YOLO=`data.yaml`, COCO=`annotations/*.json`, HF=`*.parquet`) are documented in stub docstrings; stubs return `false` so no disk I/O occurs in tests.
+- `Send + Sync` bounds on both traits are required for `Box<dyn FormatImporter>` / `Box<dyn FormatExporter>` to be storable in shared state.
+
+### Files Changed
+- `crates/core/src/formats/mod.rs` — new (467 lines, 15 tests)
+- `crates/core/src/lib.rs` — added `pub mod formats;`
+
+### Test Results
+15 tests pass, 0 failures, 0 warnings.

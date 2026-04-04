@@ -1,0 +1,68 @@
+T15: Generic Format Trait + Plugin Interface
+============================================
+
+DATE: 2026-04-04
+
+FILES CREATED / MODIFIED
+--------------------------
+- crates/core/src/formats/mod.rs  (new, 467 lines)
+- crates/core/src/lib.rs          (added `pub mod formats;`)
+
+TRAITS DEFINED
+--------------
+pub trait FormatImporter: Send + Sync {
+    fn name(&self) -> &str;
+    fn detect(&self, path: &Path) -> bool;
+    fn import(&self, db: &Database, storage: &StorageManager, path: &Path, dataset_name: &str) -> Result<Dataset>;
+}
+
+pub trait FormatExporter: Send + Sync {
+    fn name(&self) -> &str;
+    fn export(&self, db: &Database, storage: &StorageManager, dataset: &Dataset, output_path: &Path) -> Result<()>;
+}
+
+REGISTRY API
+------------
+FormatRegistry::new()                           -> empty registry
+FormatRegistry::default()                       -> empty registry (via Default trait)
+FormatRegistry::default_registry()              -> registry with yolo/coco/huggingface stubs
+registry.register_importer(Box<dyn FormatImporter>)
+registry.register_exporter(Box<dyn FormatExporter>)
+registry.detect_format(path: &Path) -> Option<&str>
+registry.get_importer(name: &str) -> Option<&dyn FormatImporter>
+registry.get_exporter(name: &str) -> Option<&dyn FormatExporter>
+
+STUBS REGISTERED IN default_registry()
+---------------------------------------
+- yolo        (YoloStubImporter / YoloStubExporter)
+- coco        (CocoStubImporter / CocoStubExporter)
+- huggingface (HuggingFaceStubImporter / HuggingFaceStubExporter)
+
+All stubs: detect() returns false, import()/export() return DmanError::FormatUnsupported.
+
+DETECTION HEURISTICS (documented in stubs, to be implemented in T12-T14)
+-------------------------------------------------------------------------
+- YOLO:        directory contains data.yaml
+- COCO:        directory contains annotations/ subdirectory with .json files
+- HuggingFace: directory contains .parquet files
+
+TEST RUN OUTPUT
+---------------
+running 15 tests
+test formats::tests::can_register_custom_importer ... ok
+test formats::tests::default_impl_delegates_to_new ... ok
+test formats::tests::default_registry_has_coco_exporter ... ok
+test formats::tests::default_registry_has_coco_importer ... ok
+test formats::tests::default_registry_has_huggingface_importer ... ok
+test formats::tests::default_registry_has_huggingface_exporter ... ok
+test formats::tests::default_registry_has_yolo_exporter ... ok
+test formats::tests::default_registry_has_yolo_importer ... ok
+test formats::tests::each_stub_importer_detect_returns_false ... ok
+test formats::tests::exporter_names_match ... ok
+test formats::tests::importer_names_match ... ok
+test formats::tests::new_registry_is_empty ... ok
+test formats::tests::stubs_detect_returns_false_for_any_path ... ok
+test formats::tests::unknown_exporter_returns_none ... ok
+test formats::tests::unknown_importer_returns_none ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 74 filtered out
