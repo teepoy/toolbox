@@ -685,3 +685,27 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 18 tests pass (8 existing + 10 new), 0 failures.
+
+## T32: Python Format Converter Plugin API (2026-04-04)
+
+### Key Findings
+
+- `PythonFormatImporter`/`PythonFormatExporter` structs should always compile (not feature-gated), only the `python_impl` module with trait impls is behind `#[cfg(feature = "python")]`
+- `#[allow(dead_code)]` required on struct fields (like `info: PluginInfo`) when they're only used inside the `python_impl` cfg-gated module
+- Top-level imports (`use std::path::Path`, `use dman_core::error::...`, `use dman_core::types::Dataset`) used only in `python_impl` must also be wrapped in `#[cfg(feature = "python")]` or you get unused-import warnings that become errors
+- CStrings for `PyModule::from_code()` MUST be constructed BEFORE entering the `Python::attach` closure — this is a lifetime/borrow constraint, not just style preference. Build them outside, then move in.
+- `PyObject::extract::<bool>(py)` vs `obj.is_truthy(py)` — prefer `is_truthy()` for Python truthiness checks; `extract::<bool>` works for actual `True`/`False` values
+- `detect()` should return `false` (not error) when plugin has no `detect` function — graceful fallback
+- `rusqlite = { workspace = true }` must be added to `crates/python/Cargo.toml` when `python_impl` uses `rusqlite::params!`
+- BEGIN IMMEDIATE transaction pattern: `conn.execute("BEGIN IMMEDIATE", [])` → work → `conn.execute("COMMIT", [])` with `let _ = conn.execute("ROLLBACK", [])` on error path
+- Import JSON contract: Python plugin returns `{"images": [...], "annotations": [...]}` dict; each image dict has `path`, `width`, `height`; each annotation has `image_path`, `category`, `bbox: {x, y, width, height}`, `confidence`
+- BBox stored as `{"x":..,"y":..,"width":..,"height":..}` (uses `width`/`height` not `w`/`h`)
+
+### Files Changed
+- `crates/python/src/plugins/mod.rs` (new) — `pub mod format;`
+- `crates/python/src/plugins/format.rs` (new) — ~600 lines, PythonFormatImporter + PythonFormatExporter
+- `crates/python/src/lib.rs` — added `pub mod plugins;`
+- `crates/python/Cargo.toml` — added `rusqlite = { workspace = true }`
+
+### Test Results
+252 tests pass (was 250 before T31, 252 after T32 added 2 new always-compiled tests), 0 failures.

@@ -1,0 +1,49 @@
+Task: T32 — Python Format Converter Plugin API
+Date: 2026-04-04
+
+## Summary
+Implemented `PythonFormatImporter` and `PythonFormatExporter` in `crates/python/src/plugins/format.rs`,
+bridging Rust's `FormatImporter`/`FormatExporter` traits to Python plugin files via PyO3 0.28.
+
+## Files Created/Modified
+- crates/python/src/plugins/mod.rs        (new) — declares `pub mod format;`
+- crates/python/src/plugins/format.rs     (new) — ~600 lines, full implementation
+- crates/python/src/lib.rs                (modified) — added `pub mod plugins;`
+- crates/python/Cargo.toml               (modified) — added `rusqlite = { workspace = true }`
+
+## Build Evidence
+cargo build --workspace (no python feature):
+  Compiling dman-python v0.1.0
+  Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.75s
+  → 0 errors, 0 warnings
+
+## Test Evidence
+cargo test --workspace:
+  running 0 tests    → ok. 0 passed (dman_cli doc-tests)
+  running 8 tests    → ok. 8 passed (dman_cli)
+  running 192 tests  → ok. 192 passed (dman_core)
+  running 3 tests    → ok. 3 passed  (dman_formats)
+  running 13 tests   → ok. 13 passed (dman_python) ← includes 2 new T32 tests
+  running 18 tests   → ok. 18 passed (dman_server)
+  running 0 tests    → ok. 0 passed  (dman_server doc-tests)
+  running 18 tests   → ok. 18 passed (dman_tui)
+  running 0 tests    → ok. 0 passed  (remaining crates)
+
+  TOTAL: 252 tests, 0 failed
+
+## New Tests Added (always-compiled, no python feature required)
+- dman_python::plugins::format::tests::test_python_format_importer_name
+- dman_python::plugins::format::tests::test_python_format_exporter_name
+
+## New Tests Added (python feature only)
+- dman_python::plugins::format::python_impl::tests::test_detect_returns_false_when_no_detect_fn
+- dman_python::plugins::format::python_impl::tests::test_detect_calls_plugin_detect_fn
+- dman_python::plugins::format::python_impl::tests::test_import_inserts_images_and_annotations
+
+## Key Design Decisions
+- Structs always compiled; `python_impl` module with trait impls behind `#[cfg(feature = "python")]`
+- `info` field has `#[allow(dead_code)]` when python feature is off
+- `with_plugin_module()` helper builds CStrings OUTSIDE Python::attach closure (borrow-checker requirement)
+- `detect()` returns false if Python plugin has no `detect` function (graceful fallback)
+- `import()` parses `{"images": [...], "annotations": [...]}` dict, wraps DB writes in BEGIN IMMEDIATE transaction
+- `export()` queries images+annotations, builds Python dicts, calls `export_dataset(data, output_path)`

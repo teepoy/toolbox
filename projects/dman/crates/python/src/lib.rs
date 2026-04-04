@@ -1,4 +1,5 @@
 pub mod plugin_info;
+pub mod plugins;
 
 pub use plugin_info::PluginInfo;
 

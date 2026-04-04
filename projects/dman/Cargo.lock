@@ -1107,6 +1107,7 @@ version = "0.1.0"
 dependencies = [
  "dman-core",
  "pyo3",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

@@ -2283,7 +2283,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/patches/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- patches`
 
-- [ ] 26. React SPA Scaffold + Build Pipeline + rust-embed
+- [x] 26. React SPA Scaffold + Build Pipeline + rust-embed
 
   **What to do**:
   - Create `crates/server/frontend/` directory with React SPA scaffold:
@@ -2624,7 +2624,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/tui/src/main.rs`, `crates/tui/src/app.rs`, `crates/tui/src/ui/`
   - Pre-commit: `cargo build -p dman-tui`
 
-- [ ] 30. TUI Detail View + Keyboard Navigation
+ - [x] 30. TUI Detail View + Keyboard Navigation
 
   **What to do**:
   - Add dataset detail view to TUI:
@@ -2698,7 +2698,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/tui/src/ui/detail.rs`, `crates/tui/src/app.rs`
   - Pre-commit: `cargo build -p dman-tui`
 
-- [ ] 31. PyO3 Integration — Feature-Gated Crate + Plugin Discovery
+ - [x] 31. PyO3 Integration — Feature-Gated Crate + Plugin Discovery
 
   **What to do**:
   - Set up `crates/python/` as a PyO3 crate:

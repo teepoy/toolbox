@@ -29,7 +29,11 @@
     "ses_2a7a8fb8cffebLohAi1ldGlshr",
     "ses_2a7a9dcf4ffenLg5q3jm4IAqy7",
     "ses_2a7a9760fffepMbV9zZGyRA2o0",
-    "ses_2a7a881dcffeE1x5qMf8tQVtul"
+    "ses_2a7a881dcffeE1x5qMf8tQVtul",
+    "ses_2a79af777ffe6uD6VQDIIcTHMU",
+    "ses_2a79190caffeEWrRkkkvDbUxwB",
+    "ses_2a791fab7ffeUEep9t3h4TP114",
+    "ses_2a7340187ffeA2wrjoqjrSewWC"
   ],
   "plan_name": "dman",
   "agent": "atlas",
@@ -96,6 +100,24 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-04-04T12:00:00.661Z"
+    },
+    "todo:26": {
+      "task_key": "todo:26",
+      "task_label": "26",
+      "task_title": "React SPA Scaffold + Build Pipeline + rust-embed",
+      "session_id": "ses_2a79af777ffe6uD6VQDIIcTHMU",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-04T12:16:46.952Z"
+    },
+    "todo:27": {
+      "task_key": "todo:27",
+      "task_label": "27",
+      "task_title": "Gallery View — Image Grid + Pagination + Filtering",
+      "session_id": "ses_2a7340187ffeA2wrjoqjrSewWC",
+      "agent": "Sisyphus-Junior",
+      "category": "visual-engineering",
+      "updated_at": "2026-04-04T14:00:58.438Z"
     }
   }
 }
