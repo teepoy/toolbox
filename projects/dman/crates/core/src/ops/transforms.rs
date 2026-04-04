@@ -505,7 +505,9 @@ fn try_imagemagick(path: &str, geometry: &str) -> Result<bool> {
 
 fn try_python_pil(path: &str, width: u32, height: u32) -> Result<bool> {
     let script = format!(
-        "from PIL import Image; img = Image.open({path!r}); img = img.resize(({width}, {height})); img.save({path!r})"
+        "from PIL import Image; img = Image.open({repr_open}); img = img.resize(({width}, {height})); img.save({repr_save})",
+        repr_open = format!("{:?}", path),
+        repr_save = format!("{:?}", path),
     );
     let output = std::process::Command::new("python3")
         .args(["-c", &script])

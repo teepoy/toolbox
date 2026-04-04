@@ -1,0 +1,29 @@
+# Task 22: Axum HTTP Server — Evidence
+
+## Tests Run
+cargo test -p dman-server
+
+## Results
+test tests::test_cors_header_present ... ok
+test tests::test_health_endpoint ... ok
+test tests::test_spa_fallback ... ok
+test tests::test_image_served_with_correct_content_type ... ok
+test tests::test_missing_image_404 ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured
+
+## Files Created/Modified
+- crates/server/src/lib.rs (new) — AppState, create_router, 5 tests
+- crates/server/src/main.rs (updated) — CLI arg parsing, tokio::main, axum::serve
+- crates/server/Cargo.toml (updated) — added tokio, serde_json, dman-core, dirs, tower (dev)
+- Cargo.toml (workspace, updated) — added tokio = {version="1", features=["full"]}
+
+## Routes Implemented
+- GET /api/health → 200 {"status":"ok"}
+- GET /images/:dataset_id/:filename → serves from {catalog_path}/data/{dataset_id}/images/{filename}
+- GET /*path (fallback) → 200 SPA placeholder HTML
+- CORS: CorsLayer::permissive() on all routes
+
+## CLI Args
+--port <u16>  (default: 8080)
+--catalog <path>  (default: ~/.dman)

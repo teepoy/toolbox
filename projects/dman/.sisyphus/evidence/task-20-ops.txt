@@ -1,0 +1,22 @@
+Task T20: Dataset Operate Commands (CRUD)
+=========================================
+
+Files created/modified:
+- crates/core/src/ops/mod.rs — new (DatasetOps unit struct with rename/duplicate/merge/split, 11 tests)
+- crates/core/src/error.rs — added InvalidInput(String) variant
+
+Test Results (cargo test -p dman-core -- ops::tests):
+11 passed, 0 failed
+
+Full suite (cargo test -p dman-core):
+173 passed, 7 failed (pre-existing patches::tests failures — JPEG fixture decode errors unrelated to T20)
+
+Operations implemented:
+- rename(db, old_name, new_name) → Result<()>
+- duplicate(db, name, new_name) → Result<Dataset>
+- merge(db, names, output_name) → Result<Dataset>
+- split(db, name, ratios, seed) → Result<Vec<Dataset>>
+
+All ops use BEGIN IMMEDIATE/COMMIT/ROLLBACK transaction pattern.
+Images are reference-copied (same file_paths, no actual file copy).
+Split uses DefaultHasher with XOR seed for deterministic shuffle.

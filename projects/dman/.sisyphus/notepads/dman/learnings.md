@@ -389,3 +389,49 @@ Since `Sample { ratio: f64 }` has no seed field, use `hash_id(id, 0)` with a con
 - `delete_by_model` similarly uses subquery for dataset scoping
 - predictions table has no `created_at` in the migration (unlike the docstring in context — the actual schema in db/mod.rs has no created_at column)
 - Test count grew from 149 → 175 (added 7 prediction tests, existing tests unchanged)
+
+## T18: Schema Evolution Transforms (2026-04-04)
+
+### Key Findings
+
+- `SchemaOp::AddColumn.default` is `serde_json::Value` (not `Option`); a JSON `null` means no default
+- `ColumnDef.default` is `Option<toml::Value>` — must convert via custom `json_value_to_toml()` helper
+- `parse_dtype()` works cleanly via serde JSON deserialization: `serde_json::from_value::<DataType>(json!(dtype_str))`
+- `transform_metadata()` optimization: skip None metadata unless there's an AddColumn with non-null default
+- Immutable pattern: each `apply_single()` produces new `SchemaDefinition` via `.clone()` — never mutates original
+- `DmanError::SchemaValidation(String)` is the right variant for all column-not-found / duplicate column errors
+- `DataType` implements `PartialEq` — works directly in `assert_eq!` in tests
+
+### Files Changed
+- `crates/core/src/virtual_dataset/transforms.rs` — new (340 lines, 16 tests)
+- `crates/core/src/virtual_dataset/mod.rs` — added `pub mod transforms;`
+
+### Test Results
+16 transforms tests pass, 172 total, 0 failures, 0 warnings.
+
+## T22: Axum HTTP Server (2026-04-04)
+
+### Key Findings
+
+- `tokio = { version = "1", features = ["full"] }` must be added to workspace `Cargo.toml` — it wasn't there by default; only axum and tower-http were in workspace deps.
+- `dirs = "5"` added directly to `crates/server/Cargo.toml` (not workspace) — same pattern as in dman-core.
+- `tower = { version = "0.5", features = ["util"] }` in `[dev-dependencies]` for `tower::ServiceExt` (`oneshot` method).
+- `dman-core` not actually needed at lib.rs level (no imports used yet) — added for future use in T23.
+- `Content-Type` header: use `HeaderValue::from_static(...)` with a `match` on file extension — no `mime` crate needed.
+- `tokio::fs::read()` returns `Err` on both missing files and permission errors → both map to 404 cleanly.
+- Image path convention: `{catalog_path}/data/{dataset_id}/images/{filename}` — matches StorageManager layout.
+- Route parameter syntax in axum 0.8: `"/images/{dataset_id}/{filename}"` (curly braces, NOT colon syntax).
+- SPA fallback: use `axum::response::Html(...)` for correct `text/html` content-type.
+- `CorsLayer::permissive()` from tower_http automatically handles OPTIONS preflight — no manual handler needed.
+- `axum::body::to_bytes(body, usize::MAX)` is the correct way to collect response body in tests (axum 0.8).
+- `Response::builder().body(Body::from(bytes))` followed by `.unwrap_or_else(|_| ...)` avoids unwrap in library code.
+- `axum::serve` requires `tokio::net::TcpListener` (not std): `tokio::net::TcpListener::bind(addr).await`.
+
+### Files Changed
+- `Cargo.toml` (workspace) — added `tokio = { version = "1", features = ["full"] }`
+- `crates/server/Cargo.toml` — added tokio, serde_json, dman-core, dirs; dev: tower + tempfile
+- `crates/server/src/lib.rs` — new (220 lines, 5 tests)
+- `crates/server/src/main.rs` — updated (CLI arg parsing, tokio::main, axum::serve)
+
+### Test Results
+5 tests pass, 0 failures, 0 warnings.

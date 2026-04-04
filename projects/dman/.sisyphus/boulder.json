@@ -19,7 +19,9 @@
     "ses_2a7c87f4bffekx9Ih5c815n6Fr",
     "ses_2a7c8d1ddffeX5dLHg3ZdG7Gf5",
     "ses_2a7c84275ffelA0W56sJ7brOAv",
-    "ses_2a7bbc91affeCusZmzlNDqcyvE"
+    "ses_2a7bbc91affeCusZmzlNDqcyvE",
+    "ses_2a7b3c049ffeSJtCjzm9cu7B28",
+    "ses_2a7b49cafffeLH39o5yBQPuNWr"
   ],
   "plan_name": "dman",
   "agent": "atlas",
@@ -68,6 +70,15 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-04-04T11:38:55.866Z"
+    },
+    "todo:18": {
+      "task_key": "todo:18",
+      "task_label": "18",
+      "task_title": "Schema Evolution Transforms",
+      "session_id": "ses_2a7b49cafffeLH39o5yBQPuNWr",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-04-04T11:46:27.486Z"
     }
   }
 }
