@@ -82,3 +82,27 @@
 
 ### Test Results
 20 tests pass, 0 failures, 0 warnings.
+
+## T6: Dataset CRUD Operations
+
+### Key Findings
+
+**Actual Dataset struct**: `types/mod.rs` uses non-optional `id: i64`, `format: DatasetFormat`, `created_at: String` (not wrapped in Option). Task description showed optional fields — always check actual types.
+
+**Format serialization**: `DatasetFormat` is an enum without string DB storage — must manually serialize/deserialize between `"Yolo"/"Coco"/"HuggingFace"/custom strings` and enum variants via helper functions.
+
+**Cascade delete**: The DB schema has `ON DELETE CASCADE` foreign keys but they only fire if `PRAGMA foreign_keys = ON`. Instead of relying on the pragma, explicit DELETE statements with subqueries (`DELETE FROM patches WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?)`) are safer and work regardless of pragma state.
+
+**Annotation FK**: In the actual schema, `annotations` only has `image_id` FK (not `dataset_id`). Must delete annotations through image_id subquery.
+
+**lib.rs drift**: The file gained `pub mod schema;` from T7 before this task ran — always re-read before editing.
+
+**DatasetService pattern**: Static methods on a unit struct (`pub struct DatasetService;`) work cleanly for service-style operations without constructor overhead.
+
+### Files Changed
+- `crates/core/src/dataset/mod.rs` — new (590 lines, 17 dataset tests)
+- `crates/core/src/error.rs` — added `DatasetAlreadyExists(String)` variant
+- `crates/core/src/lib.rs` — added `pub mod dataset;`
+
+### Test Results
+21 tests pass (17 dataset + pre-existing), 0 failures.

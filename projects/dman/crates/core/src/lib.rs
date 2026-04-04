@@ -1,3 +1,4 @@
+pub mod dataset;
 pub mod db;
 pub mod error;
 pub mod schema;

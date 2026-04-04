@@ -25,6 +25,9 @@ pub enum DmanError {
     #[error("Dataset not found: {0}")]
     DatasetNotFound(String),
 
+    #[error("dataset already exists: {0}")]
+    DatasetAlreadyExists(String),
+
     #[error("Format not supported: {0}")]
     FormatUnsupported(String),
 
