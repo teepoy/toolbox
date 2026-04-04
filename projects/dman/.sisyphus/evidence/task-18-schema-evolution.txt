@@ -1,0 +1,20 @@
+Task: T18 Schema Evolution Transforms
+Date: 2026-04-04
+
+Files Created:
+- crates/core/src/virtual_dataset/transforms.rs (340 lines, 16 tests)
+
+Files Modified:
+- crates/core/src/virtual_dataset/mod.rs (added `pub mod transforms;`)
+
+Test Results:
+- 16 new transforms tests: all pass
+- 172 total dman-core tests: all pass (up from 138+)
+
+Key implementation decisions:
+- SchemaTransformer unit struct with two static methods: apply() and apply_to_images()
+- SchemaOp::AddColumn.default is serde_json::Value (non-optional); Null means no default
+- ColumnDef.default is Option<toml::Value>; json_value_to_toml() converts between them
+- parse_dtype() uses serde JSON deserialization path (same as DataType's custom Deserialize)
+- transform_metadata() skips images with None metadata unless AddColumn has non-null default
+- DmanError::SchemaValidation used for all invalid column errors

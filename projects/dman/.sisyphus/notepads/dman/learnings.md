@@ -378,3 +378,14 @@ Since `Sample { ratio: f64 }` has no seed field, use `hash_id(id, 0)` with a con
 
 ### Test Results
 13 virtual_dataset tests pass, 138 total, 0 failures, 0 warnings.
+
+## T24 - Predictions Storage + Management
+
+- `PredictionService` follows identical pattern to `EmbeddingService` (unit struct, all static methods)
+- `serde_json::Value` stored as TEXT: `serde_json::to_string()` on write, `serde_json::from_str()` on read
+- `compare_models` iterates models list, calls `get_by_model` per model, builds `HashMap<i64, HashMap<String, Value>>` keyed by image_id, then converts to sorted `Vec<ImageComparison>`
+- No `created_at` field on the Prediction type despite it existing in the DB schema — don't SELECT it; the type definition is authoritative
+- `get_by_dataset` uses subquery: `WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?)`
+- `delete_by_model` similarly uses subquery for dataset scoping
+- predictions table has no `created_at` in the migration (unlike the docstring in context — the actual schema in db/mod.rs has no created_at column)
+- Test count grew from 149 → 175 (added 7 prediction tests, existing tests unchanged)
