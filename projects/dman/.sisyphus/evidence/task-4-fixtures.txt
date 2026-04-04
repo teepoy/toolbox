@@ -1,0 +1,3 @@
+Verified fixture structure with `ls -R crates/core/tests/fixtures/`.
+Validated COCO JSON with `python3 -c "import json; json.load(open('crates/core/tests/fixtures/coco/annotations.json'))"`.
+Confirmed `cargo test --workspace` passes.

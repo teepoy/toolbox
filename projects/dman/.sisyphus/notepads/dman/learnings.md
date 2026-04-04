@@ -51,3 +51,6 @@
 - `rusqlite_migration` works well for append-only schema setup; keep migrations centralized in `db::migrations()`.
 - In-memory SQLite may report `journal_mode=memory`; WAL pragmas can still execute without error during tests.
 - Database primitives should stay thin: open, enable WAL, migrate, and leave domain logic elsewhere.
+## Task 4 fixture infra
+- Tiny 1x1 JPEG fixtures work well for YOLO/COCO smoke tests and keep workspace tests fast.
+- A minimal parquet fixture can be generated via a temporary Rust helper when Python parquet libraries are unavailable.

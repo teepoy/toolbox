@@ -1,0 +1,23 @@
+version = "1"
+name = "basic-schema"
+
+[[fields]]
+name = "label"
+dtype = "string"
+required = true
+
+[[fields]]
+name = "bbox"
+dtype = "bbox"
+required = false
+
+[[fields]]
+name = "confidence"
+dtype = "float"
+required = false
+default = 1.0
+
+[[fields]]
+name = "split"
+dtype = "string"
+required = false
