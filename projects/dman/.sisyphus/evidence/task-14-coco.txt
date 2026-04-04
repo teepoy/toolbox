@@ -1,0 +1,49 @@
+T14: COCO Format Importer/Exporter
+===================================
+Date: 2026-04-04
+
+FILES CREATED/MODIFIED
+----------------------
+- crates/core/src/formats/coco/mod.rs (new, 668 lines)
+- crates/core/src/formats/mod.rs (updated: added pub mod coco, replaced CocoStubImporter/CocoStubExporter with real impls)
+
+TEST RESULTS
+------------
+cargo test -p dman-core -- formats::coco
+  11/11 passed:
+  - test_exporter_name
+  - test_coco_detects_fixture_dir
+  - test_coco_detect_returns_false_for_empty_dir
+  - test_importer_name
+  - test_coco_detect_annotations_subdir
+  - test_import_bbox_stored_correctly
+  - test_import_categories_have_supercategory
+  - test_roundtrip
+  - test_import_coco_fixture
+  - test_export_correct_counts
+  - test_export_creates_valid_json
+
+cargo test -p dman-core (full suite)
+  125/125 passed, 0 failed
+
+FIXTURE VERIFIED
+----------------
+crates/core/tests/fixtures/coco/annotations.json:
+  - 3 images (ids 1,2,3)
+  - 5 annotations with bbox [x,y,w,h] format
+  - 2 categories: cat (id=1), dog (id=2), both supercategory="animal"
+
+IMPLEMENTATION NOTES
+--------------------
+- CocoImporter.detect(): checks annotations/ subdir for JSON files, then annotations.json, then direct JSON file
+- BBox stored as JSON {"x":..,"y":..,"w":..,"h":..} — COCO [x,y,w,h] → internal format
+- Segmentation: polygon arrays stored as-is; RLE/other skipped
+- Unknown image_id in annotations → skip with eprintln warning
+- Category/image IDs remapped (COCO IDs → DB auto-increment IDs) during import
+- Export re-numbers all IDs as 1-based sequential
+- Transaction: BEGIN IMMEDIATE ... COMMIT for bulk inserts
+
+COMMIT
+------
+feat(core): implement COCO format importer/exporter
+hash: fb8b002

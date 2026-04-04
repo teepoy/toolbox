@@ -1,0 +1,78 @@
+T16 — Embeddings Storage + Metadata Columns
+============================================
+Date: 2026-04-04
+
+FILES CREATED / MODIFIED
+-------------------------
+crates/core/src/embeddings/mod.rs  (new, 302 lines)
+crates/core/src/lib.rs             (added: pub mod embeddings;)
+
+SCHEMA DISCREPANCY RESOLVED
+-----------------------------
+Task spec referenced a `dataset_id` column in `embeddings` and an `Embedding.dataset_id` field.
+Neither exists in the actual codebase.
+
+Actual DB schema (from db/mod.rs migration):
+  embeddings(id INTEGER PK, image_id INTEGER FK, model_name TEXT NOT NULL, vector BLOB NOT NULL, metadata TEXT)
+
+Actual Embedding type (from types/mod.rs):
+  pub struct Embedding {
+      pub id: i64,
+      pub image_id: i64,
+      pub model_name: String,
+      pub vector: Vec<f32>,
+      pub metadata: Option<serde_json::Value>,
+  }
+
+Methods that group by dataset_id (list_by_dataset, has_embeddings, get_embedding_models)
+use a JOIN through the `images` table:
+  JOIN images i ON e.image_id = i.id WHERE i.dataset_id = ?1
+
+IMPLEMENTATION DETAILS
+-----------------------
+EmbeddingService (stateless struct, all methods take &Database):
+
+  store(db, image_id, model_name, vector) -> Result<i64>
+    - Encodes &[f32] to Vec<u8> via little-endian bytes
+    - INSERT INTO embeddings, returns last_insert_rowid()
+
+  get(db, image_id, model_name) -> Result<Option<Embedding>>
+    - SELECT ... WHERE image_id=?1 AND model_name=?2 LIMIT 1
+    - Decodes BLOB back to Vec<f32>
+
+  list_by_dataset(db, dataset_id) -> Result<Vec<Embedding>>
+    - JOIN through images table
+
+  delete_by_image(db, image_id) -> Result<()>
+    - DELETE FROM embeddings WHERE image_id=?1
+
+  has_embeddings(db, dataset_id) -> Result<bool>
+    - COUNT(*) JOIN through images, >0
+
+  get_embedding_models(db, dataset_id) -> Result<Vec<String>>
+    - SELECT DISTINCT model_name JOIN through images, ORDER BY model_name
+
+f32 BLOB ENCODING (no bytemuck dep):
+  encode: vector.iter().flat_map(|f| f.to_le_bytes()).collect()
+  decode: bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0],c[1],c[2],c[3]])).collect()
+
+TEST RESULTS
+------------
+$ cargo test -p dman-core -- embeddings
+
+running 8 tests
+test embeddings::tests::test_embeddings_byte_roundtrip ... ok
+test embeddings::tests::test_embeddings_has_embeddings ... ok
+test embeddings::tests::test_embeddings_get_missing_returns_none ... ok
+test embeddings::tests::test_embeddings_list_by_dataset ... ok
+test embeddings::tests::test_embeddings_delete_by_image ... ok
+test embeddings::tests::test_embeddings_get_embedding_models ... ok
+test embeddings::tests::test_embeddings_store_and_retrieve ... ok
+test embeddings::tests::test_embeddings_list_by_dataset_empty ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 89 filtered out
+
+GIT COMMIT
+----------
+feat(core): add embeddings storage and metadata columns
+commit: 95e5907

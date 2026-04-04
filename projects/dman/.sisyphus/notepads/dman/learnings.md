@@ -319,3 +319,25 @@ writer.close().map_err(|e| DmanError::FormatError(e.to_string()))?;
 
 ### Test Results
 6 HuggingFace tests pass, 114 total tests pass, 0 failures, 0 warnings.
+
+## T14: COCO Format Importer/Exporter (2026-04-04)
+
+### Key Findings
+
+- `formats/mod.rs` had `CocoStubImporter`/`CocoStubExporter` structs — replaced with `coco::CocoImporter`/`coco::CocoExporter` in `default_registry()`.
+- Existing tests `stubs_detect_returns_false_for_any_path` and `each_stub_importer_detect_returns_false` pass with the real implementation because test paths (`/tmp/fake`, `/tmp/some_dataset_dir`) don't have COCO file structure, so `detect()` returns `false`.
+- COCO bbox `[x, y, w, h]` stored as `{"x":..,"y":..,"w":..,"h":..}` JSON string — matches project convention.
+- COCO category/image IDs are COCO-specific and don't match DB auto-increment IDs. Must maintain two HashMaps during import: `coco_id → db_id` for both images and categories.
+- Export re-numbers all IDs 1-based sequentially to produce valid COCO output.
+- `segmentation` field: `serde_json::Value` is the most flexible type — handles both polygon arrays and other formats without panicking.
+- `#[serde(default)]` on `segmentation: serde_json::Value` requires that `serde_json::Value` implements `Default` (it does, defaults to `Value::Null`).
+- `DatasetService::register()` requires path to exist on disk — pass the actual fixture directory.
+- `db.conn.last_insert_rowid()` is called immediately after each INSERT — don't call it after multiple inserts.
+- Internal struct `RawImg`/`RawAnn` defined inside function body is valid Rust — useful for local query result types.
+
+### Files Changed
+- `crates/core/src/formats/coco/mod.rs` — new (668 lines, 11 tests)
+- `crates/core/src/formats/mod.rs` — added `pub mod coco;`, replaced COCO stubs with real impls
+
+### Test Results
+11/11 COCO tests pass, 125/125 full suite passes, 0 failures.

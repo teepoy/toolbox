@@ -12,7 +12,13 @@
     "ses_2a7dccdf4ffegqv5FS9q0JJVqU",
     "ses_2a7d3401dffe7vsdynsfqyU0sG",
     "ses_2a7d30473ffe30T35nmhjyUDos",
-    "ses_2a7d2c35dffeuHEz9qXl5mpVfC"
+    "ses_2a7d2c35dffeuHEz9qXl5mpVfC",
+    "ses_2a7cda66affehI6RZHvm7sTc7y",
+    "ses_2a7c806b8ffe6KYJSAxh7D65Jr",
+    "ses_2a7c93964ffeNhOFDcFxvItUlx",
+    "ses_2a7c87f4bffekx9Ih5c815n6Fr",
+    "ses_2a7c8d1ddffeX5dLHg3ZdG7Gf5",
+    "ses_2a7c84275ffelA0W56sJ7brOAv"
   ],
   "plan_name": "dman",
   "agent": "atlas",
@@ -43,6 +49,15 @@
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
       "updated_at": "2026-04-04T11:10:45.794Z"
+    },
+    "todo:11": {
+      "task_key": "todo:11",
+      "task_label": "11",
+      "task_title": "CLI Shell — Clap Subcommands",
+      "session_id": "ses_2a7c93964ffeNhOFDcFxvItUlx",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-04-04T11:24:03.367Z"
     }
   }
 }

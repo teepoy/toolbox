@@ -1124,7 +1124,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/config/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- config`
 
-- [ ] 11. CLI Shell — Clap Subcommands
+- [x] 11. CLI Shell — Clap Subcommands
 
   **What to do**:
   - Create `crates/cli/src/main.rs` with clap derive-based CLI structure
@@ -1216,7 +1216,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/cli/src/main.rs`, `crates/cli/src/commands/`
   - Pre-commit: `cargo test -p dman-cli`
 
-- [ ] 12. HuggingFace Parquet Importer/Exporter
+- [x] 12. HuggingFace Parquet Importer/Exporter
 
   **What to do**:
   - Create `crates/core/src/formats/huggingface/mod.rs`
@@ -1298,7 +1298,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/formats/huggingface/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- formats::huggingface`
 
-- [ ] 13. YOLO Format Importer/Exporter
+- [x] 13. YOLO Format Importer/Exporter
 
   **What to do**:
   - Create `crates/core/src/formats/yolo/mod.rs`
@@ -1377,7 +1377,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/formats/yolo/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- formats::yolo`
 
-- [ ] 14. COCO Format Importer/Exporter
+- [x] 14. COCO Format Importer/Exporter
 
   **What to do**:
   - Create `crates/core/src/formats/coco/mod.rs`
@@ -1456,7 +1456,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/formats/coco/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- formats::coco`
 
-- [ ] 15. Generic Format Trait + Plugin Interface
+- [x] 15. Generic Format Trait + Plugin Interface
 
   **What to do**:
   - Create `crates/core/src/formats/mod.rs` with trait definitions:
@@ -1543,7 +1543,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/formats/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- formats`
 
-- [ ] 16. Embeddings Storage + Metadata Columns
+- [x] 16. Embeddings Storage + Metadata Columns
 
   **What to do**:
   - Create `crates/core/src/embeddings/mod.rs` with `EmbeddingService`
