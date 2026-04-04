@@ -1,5 +1,6 @@
 pub mod db;
 pub mod error;
+pub mod schema;
 pub mod types;
 
 pub use error::{DmanError, Result};

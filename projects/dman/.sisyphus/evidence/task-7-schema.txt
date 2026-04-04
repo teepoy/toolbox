@@ -1,0 +1,39 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running unittests src/lib.rs (target/debug/deps/dman_core-a53a69149a599101)
+
+running 20 tests
+test error::tests::test_display_schema_validation ... ok
+test schema::tests::test_dtype_embedding_vector ... ok
+test schema::tests::test_dtype_from_str_basic ... ok
+test schema::tests::test_dtype_list ... ok
+test schema::tests::test_dtype_serde_roundtrip ... ok
+test schema::tests::test_dtype_unknown_returns_error ... ok
+test schema::tests::test_schema_from_str_invalid_toml_returns_error ... ok
+test schema::tests::test_schema_from_str_fields_form ... ok
+test schema::tests::test_schema_from_str_wrapped_form ... ok
+test schema::tests::test_schema_from_str_columns_form ... ok
+test schema::tests::test_schema_from_toml_fixture ... ok
+test schema::tests::test_validate_row_embedding_vector_correct ... ok
+test schema::tests::test_validate_row_embedding_vector_wrong_length ... ok
+test schema::tests::test_validate_row_optional_field_absent_is_ok ... ok
+test schema::tests::test_validate_row_int_rejects_float ... ok
+test schema::tests::test_validate_row_missing_required_field ... ok
+test schema::tests::test_validate_row_type_mismatch_bool ... ok
+test schema::tests::test_validate_row_type_mismatch_string ... ok
+test schema::tests::test_validate_row_null_required_field ... ok
+test schema::tests::test_validate_row_valid ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.00s
+
+     Running tests/fixtures_test.rs (target/debug/deps/fixtures_test-dd59e0c8dde935cc)
+
+running 1 test
+test test_schema_fixture_is_valid_toml ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+   Doc-tests dman_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

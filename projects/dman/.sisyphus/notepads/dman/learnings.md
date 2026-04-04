@@ -54,3 +54,31 @@
 ## Task 4 fixture infra
 - Tiny 1x1 JPEG fixtures work well for YOLO/COCO smoke tests and keep workspace tests fast.
 - A minimal parquet fixture can be generated via a temporary Rust helper when Python parquet libraries are unavailable.
+
+## T7: Schema System (TOML Parsing + Validation)
+
+### Key Findings
+
+**Fixture format discrepancy**: `tests/fixtures/schema/basic.toml` uses `[[fields]]` (lowercase keys, lowercase dtype values like `"string"`, `"bbox"`) while the task spec shows `[[columns]]` with PascalCase dtypes. Solved by accepting both via a `RawSchema` intermediate struct with `#[serde(default)]` on both `columns` and `fields` fields, preferring `columns` when non-empty.
+
+**DataType custom serde**: `EmbeddingVector(128)` cannot be deserialized by serde's built-in enum derivation. Implemented custom `Deserialize` with a `Visitor` that calls `DataType::from_str_repr()` — case-insensitive matching via `.to_ascii_lowercase()`. The same pattern handles `List(InnerType)` recursively.
+
+**Wrapped `[schema]` form**: Some schemas may nest under `[schema]`. Handled with a `WrappedSchema` fallback: try flat `RawSchema` first, then `WrappedSchema`.
+
+**Unused import fix**: `DmanError` needed only in test assertions — moved import inside `#[cfg(test)] mod tests { use crate::error::DmanError; }` to avoid production-code warning.
+
+**validate_row semantics**:
+- Missing optional field (no default) → OK
+- Missing required field → ValidationError
+- Present null required field → ValidationError
+- Int accepts whole JSON numbers only (fract() == 0.0 check)
+- EmbeddingVector(N) checks both array length and numeric elements
+
+**Edition 2024 / rustc 1.94**: No issues with the approach used.
+
+### Files Changed
+- `crates/core/src/schema/mod.rs` — new (794 lines, 19 schema tests)
+- `crates/core/src/lib.rs` — added `pub mod schema;`
+
+### Test Results
+20 tests pass, 0 failures, 0 warnings.
