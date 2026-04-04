@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+pub mod api;
+
+use std::sync::Arc;
 
 use axum::{
     Router,
@@ -11,12 +13,9 @@ use axum::{
 use serde_json::json;
 use tower_http::cors::CorsLayer;
 
-const SPA_HTML: &str = r#"<html><body><div id="root">dman web UI (coming soon)</div></body></html>"#;
+pub use api::AppState;
 
-#[derive(Clone)]
-pub struct AppState {
-    pub catalog_path: PathBuf,
-}
+const SPA_HTML: &str = r#"<html><body><div id="root">dman web UI (coming soon)</div></body></html>"#;
 
 fn content_type_for_extension(ext: &str) -> &'static str {
     match ext.to_ascii_lowercase().as_str() {
@@ -33,10 +32,9 @@ async fn health_handler() -> impl IntoResponse {
 }
 
 async fn image_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path((dataset_id, filename)): Path<(String, String)>,
 ) -> Response<Body> {
-    // Images are stored at {catalog_path}/data/{dataset_id}/images/{filename}
     let image_path = state
         .catalog_path
         .join("data")
@@ -77,8 +75,17 @@ async fn spa_fallback() -> impl IntoResponse {
 }
 
 pub async fn create_router(state: AppState) -> Router {
+    let state = Arc::new(state);
     Router::new()
         .route("/api/health", get(health_handler))
+        .route("/api/datasets", get(api::list_datasets))
+        .route("/api/datasets/{name}", get(api::get_dataset))
+        .route("/api/datasets/{name}/images", get(api::list_images))
+        .route("/api/datasets/{name}/images/{id}", get(api::get_image))
+        .route("/api/datasets/{name}/categories", get(api::list_categories))
+        .route("/api/datasets/{name}/stats", get(api::get_dataset_stats))
+        .route("/api/virtual-datasets", get(api::list_virtual_datasets))
+        .route("/api/virtual-datasets/{name}", get(api::get_virtual_dataset))
         .route("/images/{dataset_id}/{filename}", get(image_handler))
         .fallback(get(spa_fallback))
         .with_state(state)
@@ -88,6 +95,7 @@ pub async fn create_router(state: AppState) -> Router {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::path::PathBuf;
 
     use axum::body::to_bytes;
     use axum::http::{Request, StatusCode};
@@ -165,7 +173,6 @@ mod tests {
     #[tokio::test]
     async fn test_image_served_with_correct_content_type() {
         let tmp = tempdir().unwrap();
-        // Create a fake image file at the expected path
         let img_dir = tmp.path().join("data").join("1").join("images");
         std::fs::create_dir_all(&img_dir).unwrap();
         let mut f = std::fs::File::create(img_dir.join("test.png")).unwrap();

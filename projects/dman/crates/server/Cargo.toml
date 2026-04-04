@@ -7,7 +7,9 @@ edition = "2024"
 axum = { workspace = true }
 tower-http = { workspace = true }
 tokio = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+rusqlite = { workspace = true }
 dman-core = { path = "../core" }
 dirs = "5"
 

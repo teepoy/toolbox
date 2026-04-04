@@ -1115,6 +1115,8 @@ dependencies = [
  "axum",
  "dirs",
  "dman-core",
+ "rusqlite",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",
@@ -1126,7 +1128,10 @@ dependencies = [
 name = "dman-tui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "crossterm 0.28.1",
+ "dirs",
+ "dman-core",
  "ratatui",
 ]
 

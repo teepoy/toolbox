@@ -1700,7 +1700,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/virtual_dataset/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- virtual_dataset`
 
-- [ ] 18. Schema Evolution Transforms
+- [x] 18. Schema Evolution Transforms
 
   **What to do**:
   - Create `crates/core/src/virtual_dataset/transforms.rs`
@@ -1854,7 +1854,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/virtual_dataset/materialize.rs`
   - Pre-commit: `cargo test -p dman-core -- virtual_dataset::materialize`
 
-- [ ] 20. Operate Commands — CRUD (rename, duplicate, merge, split)
+- [x] 20. Operate Commands — CRUD (rename, duplicate, merge, split)
 
   **What to do**:
   - Create `crates/core/src/ops/mod.rs` with dataset-level operations
@@ -1919,7 +1919,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/ops/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- ops`
 
-- [ ] 21. Operate Commands — Data Transforms (filter, sample, resize, relabel)
+- [x] 21. Operate Commands — Data Transforms (filter, sample, resize, relabel)
 
   **What to do**:
   - Create `crates/core/src/ops/transforms.rs` with data-level transform operations
@@ -1983,7 +1983,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/ops/transforms.rs`
   - Pre-commit: `cargo test -p dman-core -- ops::transforms`
 
-- [ ] 22. Axum HTTP Server — Image Serving + API Routes
+- [x] 22. Axum HTTP Server — Image Serving + API Routes
 
   **What to do**:
   - Create `crates/server/src/main.rs` and `crates/server/src/lib.rs`
@@ -2145,7 +2145,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/server/src/api/`
   - Pre-commit: `cargo test -p dman-server -- api`
 
-- [ ] 24. Predictions Storage + Management
+- [x] 24. Predictions Storage + Management
 
   **What to do**:
   - Create `crates/core/src/predictions/mod.rs` with `PredictionService`
@@ -2209,7 +2209,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/predictions/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- predictions`
 
-- [ ] 25. Patches (Image Crop) Extraction + Storage
+- [x] 25. Patches (Image Crop) Extraction + Storage
 
   **What to do**:
   - Create `crates/core/src/patches/mod.rs` with `PatchService`
