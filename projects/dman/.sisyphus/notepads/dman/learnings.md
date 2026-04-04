@@ -826,6 +826,36 @@ format!("{}_{:08x}.jpg", image_id, hash)
 - `#[pymethods]` methods are private from Rust test code — tests must access struct fields directly (made fields `pub(crate)`)
 - `#[derive(Debug)]` needed on `#[pyclass]` structs if tests use `.expect_err()`
 
+## T37: CLI End-to-End Integration Tests (2026-04-05)
+
+### Integration Test Module Structure
+- `[[test]]` in Cargo.toml pointing to `tests/integration/mod.rs` is the cleanest way to split tests across multiple files under one test binary.
+- `tests/integration/mod.rs` simply declares `mod lifecycle; mod schema; mod virtual_dataset;`
+- Cargo auto-discovers `tests/cli.rs` as a separate test binary — both run under `cargo test -p dman-cli`
+
+### Output Assertions
+- `init` stdout: `"Catalog initialized at"` (green checkmark prefix stripped by predicates)
+- `add` stdout: `"Registered dataset"` + dataset name
+- `list` empty: `"No datasets registered"`
+- `list` with datasets: shows table + `"dataset(s) total"`
+- `remove --yes` stdout: `"Removed dataset"`
+- `remove` without `--yes`: prompts and reads stdin; send `"n\n"` via `.write_stdin()`; output: `"Aborted"`
+- All stub commands (import, export, operate, virtual, serve, materialize, tui): print to **stderr** (not stdout) and contain `"not yet implemented"`. Exit code: 0.
+- `materialize <name>` stderr includes the dataset name
+
+### Error Cases
+- `add` to nonexistent path → exit nonzero
+- `add`/`list`/`inspect` without `init` → exit nonzero
+- `inspect <missing>` → exit nonzero
+- `remove <missing> --yes` → exit nonzero
+
+### JSON List Output
+- `list --format json` outputs a JSON array — parse with `serde_json::from_str::<serde_json::Value>` and assert `.is_array()`
+- Required `serde_json = { workspace = true }` in `[dev-dependencies]` for the integration test binary
+
+### Test Results
+32 tests pass across 3 files (lifecycle: 17, schema: 5, virtual_dataset: 10), 0 failures.
+
 ## T36: Label Studio API Integration (2026-04-04)
 
 - `reqwest 0.12` should use `default-features = false` with `rustls-tls` in this environment; the default native-tls path pulled in OpenSSL and broke build/test due missing system `openssl.pc`.

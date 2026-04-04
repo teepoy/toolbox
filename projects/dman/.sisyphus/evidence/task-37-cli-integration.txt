@@ -1,0 +1,55 @@
+Task T37: CLI End-to-End Integration Tests
+==========================================
+Date: 2026-04-05
+
+Test run output:
+----------------
+cargo test -p dman-cli --test integration
+
+running 32 tests
+test lifecycle::add_without_init_fails ... ok
+test lifecycle::init_prints_initialized_message ... ok
+test lifecycle::init_creates_catalog_db ... ok
+test lifecycle::list_empty_catalog_shows_no_datasets_message ... ok
+test lifecycle::add_nonexistent_path_fails ... ok
+test lifecycle::init_is_idempotent ... ok
+test lifecycle::inspect_nonexistent_dataset_fails ... ok
+test lifecycle::add_with_format_flag_succeeds ... ok
+test lifecycle::add_registers_dataset_successfully ... ok
+test lifecycle::inspect_shows_dataset_details ... ok
+test lifecycle::list_shows_added_dataset ... ok
+test lifecycle::list_json_format_is_valid_json ... ok
+test virtual_dataset::materialize_stub_exits_zero ... ok
+test virtual_dataset::materialize_stub_includes_dataset_name_in_message ... ok
+test virtual_dataset::operate_stub_exits_zero ... ok
+test virtual_dataset::materialize_stub_prints_not_implemented_to_stderr ... ok
+test virtual_dataset::operate_stub_prints_not_implemented_to_stderr ... ok
+test virtual_dataset::serve_stub_exits_zero ... ok
+test virtual_dataset::serve_stub_with_custom_port_exits_zero ... ok
+test virtual_dataset::virtual_stub_exits_zero ... ok
+test virtual_dataset::virtual_stub_prints_not_implemented_to_stderr ... ok
+test virtual_dataset::virtual_stub_includes_command_name_in_message ... ok
+test lifecycle::remove_nonexistent_dataset_fails ... ok
+test schema::export_stub_exits_zero_and_prints_stub_message ... ok
+test schema::export_stub_includes_dataset_name_in_message ... ok
+test lifecycle::full_lifecycle_init_add_inspect_remove ... ok
+test schema::import_stub_exits_zero_and_prints_stub_message ... ok
+test schema::import_stub_with_format_flag_exits_zero ... ok
+test lifecycle::remove_abort_via_stdin_n_keeps_dataset ... ok
+test schema::import_stub_with_name_flag_exits_zero ... ok
+test lifecycle::list_table_shows_count ... ok
+test lifecycle::remove_with_yes_flag_removes_dataset ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+Files created:
+--------------
+- crates/cli/tests/integration/mod.rs
+- crates/cli/tests/integration/lifecycle.rs  (17 tests)
+- crates/cli/tests/integration/schema.rs     (5 tests)
+- crates/cli/tests/integration/virtual_dataset.rs (10 tests)
+
+Cargo.toml changes:
+-------------------
+- Added serde_json to [dev-dependencies]
+- Added [[test]] entry: name = "integration", path = "tests/integration/mod.rs"
