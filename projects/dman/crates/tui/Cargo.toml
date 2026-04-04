@@ -1,0 +1,8 @@
+[package]
+name = "dman-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossterm = { workspace = true }
+ratatui = { workspace = true }

@@ -1,0 +1,13 @@
+[package]
+name = "dman-python"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+python = ["dep:pyo3"]
+
+[dependencies]
+pyo3 = { workspace = true, optional = true }
