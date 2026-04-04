@@ -1,0 +1,4 @@
+cargo test -p dman-core -- config
+result: passed (4 tests)
+lsp_diagnostics: clean for crates/core/src (.rs errors=0)
+files: crates/core/src/config/mod.rs, crates/core/src/lib.rs

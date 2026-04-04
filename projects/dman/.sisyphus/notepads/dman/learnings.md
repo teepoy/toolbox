@@ -106,3 +106,61 @@
 
 ### Test Results
 21 tests pass (17 dataset + pre-existing), 0 failures.
+
+## T10: Configuration System
+
+### Key Findings
+
+- `#[serde(default)]` must be applied at both the struct level and on nested fields to make partial TOML config loading reliable.
+- `DmanConfig::load()` can treat a missing file as a normal default case before attempting TOML parsing.
+- `toml::to_string_pretty()` is a clean fit for human-editable config files; create parent dirs first, then write the serialized string.
+- Round-trip tests are easiest with `tempdir()` plus a nested output path to verify directory creation.
+
+### Test Results
+
+- `cargo test -p dman-core -- config` passed: 4 config tests green.
+
+## T9: Catalog Service (2026-04-04)
+- `Catalog` struct wraps `Database` + `PathBuf` home directory
+- `home_path()` checks `$DMAN_HOME` env var first, falls back to `dirs::home_dir()/.dman`
+- `init_at(path)` / `open_at(path)` private helpers enable test isolation without env var races
+- Public `init()` / `open()` delegate to private helpers using `home_path()`
+- `open_at` returns `DmanError::StorageError("catalog not initialized - run \`dman init\`")` if `catalog.db` absent
+- `dirs = "5"` added to crates/core/Cargo.toml
+- Test pattern: `tempdir()` + call `init_at`/`open_at` directly — avoids `std::env::set_var` race conditions in parallel test runs
+- `// SAFETY:` annotation required on all `unsafe` blocks (Rust convention, enforced by clippy)
+- Pre-existing broken `storage/mod.rs` (T8) needed `sha2 = "0.10"` added to compile; also had duplicate test function (pre-existing, not my problem to fix beyond unblocking compilation)
+- `unwrap_err()` requires `T: Debug` — use `.err().expect(...)` instead when `T` doesn't implement `Debug`
+
+## T8: Image Storage Manager (2026-04-04)
+
+### Dependency
+- `sha2 = "0.10"` added directly to `crates/core/Cargo.toml` (not workspace)
+- No `hex` crate needed — use `format!("{:02x}", b)` with `std::fmt::Write` trait
+
+### SHA256 without hex crate
+```rust
+use std::fmt::Write as FmtWrite;
+use sha2::{Digest, Sha256};
+let digest = Sha256::new().chain_update(data).finalize();
+let mut hex = String::with_capacity(64);
+for b in digest.iter() { write!(&mut hex, "{:02x}", b).unwrap(); }
+```
+
+### Symlink deletion
+- `fs::remove_file` handles both regular files and symlinks on Linux
+- Guard: check `exists() || symlink_metadata().is_ok()` before removal (avoids error on missing)
+
+### integrity check pattern (rusqlite)
+```rust
+let mut stmt = db.conn.prepare("SELECT file_path FROM images WHERE dataset_id = ?")?;
+let paths: Vec<String> = stmt
+    .query_map(rusqlite::params![dataset_id], |row| Ok(row.get::<_, String>(0)?))
+    .?.collect::<rusqlite::Result<Vec<_>>>()?;
+```
+
+### Lib.rs already had extra modules
+- By T8 time, `lib.rs` already had `pub mod catalog; pub mod config;` — always re-read before editing
+
+### Cargo.toml already had `dirs = "5"`
+- Re-read Cargo.toml before editing — other tasks may have added deps
