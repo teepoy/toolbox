@@ -1,0 +1,36 @@
+T31 Evidence: PyO3 Integration — Feature-Gated Crate + Plugin Discovery
+========================================================================
+Date: 2026-04-04
+
+FILES CREATED/MODIFIED:
+- crates/python/Cargo.toml — updated: cdylib+rlib, dman-core dep, walkdir, serde, serde_json
+- crates/python/src/lib.rs — PluginManager + discover() + feature-gated load_plugin_with_python()
+- crates/python/src/plugin_info.rs — PluginInfo struct
+- pyproject.toml — maturin config at workspace root
+- crates/tui/Cargo.toml — added rusqlite dep (pre-existing dirty change fix)
+
+BUILD RESULTS:
+1. cargo build --workspace → Finished dev profile [OK, no errors, Python NOT required]
+2. cargo build -p dman-python --features python → Finished dev profile [OK, no errors/warnings]
+
+TEST RESULTS:
+1. cargo test -p dman-python --features python → 11 passed, 0 failed
+2. cargo test --workspace → 250 passed total (0 failures)
+   - cli: 8 passed
+   - core: 192 passed
+   - fixtures: 3 passed
+   - python: 11 passed (NEW)
+   - server: 18 passed
+   - tui: 18 passed
+   Previous: 229 tests (no python tests), all preserved
+
+FEATURE GATE VALIDATION:
+- Without --features python: PluginManager, discover(), PluginInfo all work
+- With --features python: load_plugin_with_python() compiled in via #[cfg(feature = "python")]
+- pyo3 remains optional = true at crate level (not workspace level)
+
+PLUGIN DISCOVERY:
+- Scans .py files via walkdir
+- Checks for "dman_plugin" string marker
+- Extracts name/type/version via text parsing (no Python execution needed)
+- Returns empty results for nonexistent dirs (graceful)

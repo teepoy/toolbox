@@ -628,3 +628,40 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 18 tests pass, 0 failures.
+
+## T31: PyO3 Integration — Feature-Gated Crate + Plugin Discovery (2026-04-04)
+
+### PyO3 0.28 API Changes
+- `Python::with_gil()` is gone — use `Python::attach()` instead
+- `Python::try_attach()` variant for when interpreter may be unavailable
+- `PyAnyMethods::downcast()` is deprecated — use `.cast()` instead
+- `PyModule::from_code()` still takes `&CStr` params (same signature)
+- Type inference for `map_err` closures with `PyErr` often fails — annotate explicitly: `|e: PyErr|`
+
+### Feature-Gating PyO3
+- `pyo3 = { workspace = true, optional = true }` in crate Cargo.toml works correctly
+- `[lib] crate-type = ["cdylib", "rlib"]` required (rlib for tests, cdylib for Python extension)
+- `#[cfg(feature = "python")]` guards code that uses PyO3
+- `use pyo3::prelude::*;` must also be behind `#[cfg(feature = "python")]`
+- `CString` values for `from_code` must be constructed before entering `Python::attach` closure
+
+### Plugin Discovery Pattern
+- Text-based discovery (no Python execution): scan .py files, check for "dman_plugin" string, parse dict keys with custom string parser
+- Custom `extract_str_field()`: find quoted key, find `:`, extract next quoted value — handles both `"key"` and `'key'` forms
+- `walkdir` with `follow_links(false)` avoids symlink loops
+- Return `Ok(vec![])` for nonexistent dirs (graceful, not an error)
+
+### Pre-existing Dirty Change
+- `crates/tui/src/main.rs` had uncommitted changes using `rusqlite::params!` without the dep
+- Fix: add `rusqlite = { workspace = true }` to `crates/tui/Cargo.toml`
+- This unblocked `cargo test --workspace` — added 10 new TUI tests (total 250 from 229)
+
+### Files Changed
+- `crates/python/Cargo.toml` — added rlib, dman-core, walkdir, serde, serde_json, tempfile dev dep
+- `crates/python/src/lib.rs` — full PluginManager implementation (272 lines, 9 tests)
+- `crates/python/src/plugin_info.rs` — PluginInfo struct (54 lines, 2 tests)
+- `pyproject.toml` — maturin config at workspace root
+- `crates/tui/Cargo.toml` — added rusqlite dep (pre-existing fix)
+
+### Test Results
+11 python tests pass, 250 total workspace tests pass, 0 failures.

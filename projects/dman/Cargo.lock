@@ -1105,7 +1105,12 @@ dependencies = [
 name = "dman-python"
 version = "0.1.0"
 dependencies = [
+ "dman-core",
  "pyo3",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "walkdir",
 ]
 
 [[package]]
@@ -1135,6 +1140,7 @@ dependencies = [
  "dirs",
  "dman-core",
  "ratatui",
+ "rusqlite",
 ]
 
 [[package]]
