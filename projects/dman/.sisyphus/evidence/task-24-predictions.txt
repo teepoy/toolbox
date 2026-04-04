@@ -1,0 +1,35 @@
+Task: T24 - Predictions Storage + Management
+Status: COMPLETE
+Commit: feat(core): implement predictions storage and management
+
+Files created:
+  - crates/core/src/predictions/mod.rs
+
+Files modified:
+  - crates/core/src/lib.rs (added: pub mod predictions;)
+
+Test results:
+  - predictions::tests: 7/7 passed
+  - Full suite: 175 passed, 0 failed
+
+Tests written:
+  1. test_store_and_get_by_image - store + retrieve round-trip preserves JSON
+  2. test_store_round_trip_preserves_json - complex nested JSON survives round-trip
+  3. test_get_by_dataset - retrieves all predictions across multiple images in dataset
+  4. test_get_by_model_filters_correctly - filter by model version returns only matching rows
+  5. test_delete_by_model - deletes only target model, leaves others intact
+  6. test_compare_models - builds per-image map across multiple models
+  7. test_get_by_image_empty - empty result when no predictions exist
+
+PredictionService methods:
+  - store(db, image_id, model_version, result, score) -> Result<i64>
+  - get_by_image(db, image_id) -> Result<Vec<Prediction>>
+  - get_by_dataset(db, dataset_id) -> Result<Vec<Prediction>>
+  - get_by_model(db, dataset_id, model_version) -> Result<Vec<Prediction>>
+  - delete_by_model(db, dataset_id, model_version) -> Result<()>
+  - compare_models(db, dataset_id, models) -> Result<ComparisonReport>
+
+Structs:
+  - PredictionService (unit struct, stateless)
+  - ComparisonReport { models: Vec<String>, per_image: Vec<ImageComparison> }
+  - ImageComparison { image_id: i64, predictions: HashMap<String, serde_json::Value> }
