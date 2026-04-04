@@ -1,5 +1,7 @@
+pub mod embeddings;
 pub mod plugin_info;
 pub mod plugins;
+pub mod sdk;
 
 pub use plugin_info::PluginInfo;
 
