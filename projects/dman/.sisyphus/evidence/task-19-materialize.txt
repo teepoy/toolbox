@@ -1,0 +1,32 @@
+T19: Materialize Command — Evidence
+=====================================
+Date: 2026-04-04
+Commit: 21695d8 feat(core): implement materialize command
+
+## Files Created / Modified
+- crates/core/src/virtual_dataset/materialize.rs  (new, ~430 lines)
+- crates/core/src/virtual_dataset/mod.rs          (added `pub mod materialize;`)
+
+## Test Results — materialize module
+running 4 tests
+test virtual_dataset::materialize::tests::test_rollback_on_failure ... ok
+test virtual_dataset::materialize::tests::test_materialize_simple ... ok
+test virtual_dataset::materialize::tests::test_materialize_filter ... ok
+test virtual_dataset::materialize::tests::test_materialize_schema_transform ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored
+
+## Full Suite Results (cargo test -p dman-core)
+test result: ok. 192 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+(fixtures_test: 3 passed; 0 failed)
+
+## Expected Outcomes Satisfied
+[x] File created: crates/core/src/virtual_dataset/materialize.rs
+[x] crates/core/src/virtual_dataset/mod.rs has `pub mod materialize;`
+[x] cargo test -p dman-core -- virtual_dataset::materialize::tests passes (4 tests)
+[x] Materialized dataset has correct image count (matching virtual dataset evaluation)
+[x] Schema transforms applied: new column names, defaults populated
+[x] Transaction rollback on failure: partial dataset cleaned up
+[x] All 192 existing + 3 fixture tests still pass (0 regressions)
+[x] Commit: 21695d8 feat(core): implement materialize command
+[x] Findings appended to .sisyphus/notepads/dman/learnings.md
+[x] Evidence saved to .sisyphus/evidence/task-19-materialize.txt

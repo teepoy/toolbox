@@ -1,0 +1,29 @@
+Task: T23 — REST API Endpoints for dman-server
+Status: COMPLETE
+Date: 2026-04-04
+
+## Files Changed
+- crates/server/src/api.rs — new (900+ lines, 13 API tests)
+- crates/server/src/lib.rs — updated (added pub mod api, Arc<AppState>, 8 new API routes)
+- crates/server/Cargo.toml — added serde, rusqlite workspace deps
+
+## API Routes Added
+GET /api/datasets                     → list_datasets (paginated)
+GET /api/datasets/{name}              → get_dataset (404 if not found)
+GET /api/datasets/{name}/images       → list_images (?category=X&page=N&per_page=N)
+GET /api/datasets/{name}/images/{id}  → get_image + annotations
+GET /api/datasets/{name}/categories   → list_categories
+GET /api/datasets/{name}/stats        → get_dataset_stats
+GET /api/virtual-datasets             → list_virtual_datasets (paginated)
+GET /api/virtual-datasets/{name}      → get_virtual_dataset (404 if not found)
+
+## Response Format
+Success: { "data": ..., "pagination": { "page", "per_page", "total" } }
+Error:   { "error": { "code": "NOT_FOUND", "message": "..." } }
+
+## Test Results
+cargo test -p dman-server -- api:
+  13 API tests pass (all new)
+cargo test -p dman-server:
+  18 total tests pass (5 existing + 13 new)
+0 regressions

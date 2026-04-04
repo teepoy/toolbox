@@ -556,3 +556,22 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 4 materialize tests pass, 192 total pass, 3 fixture tests pass, 0 failures.
+
+## T23: REST API Endpoints (2026-04-04)
+
+### Key Findings
+
+- `rusqlite` must be added to `crates/server/Cargo.toml` separately when `api.rs` directly uses `rusqlite::params!` — it's not auto-imported via `dman-core`.
+- `serde = { workspace = true }` needed in server Cargo.toml for `#[derive(Deserialize, Serialize)]` on request/response types.
+- **Arc<AppState> pattern**: `create_router` receives `AppState`, wraps it in `Arc::new(state)`, then passes to `.with_state(arc)`. All handlers use `State(state): State<Arc<AppState>>`.
+- Pre-existing `lib.rs` used `State<AppState>` (non-Arc). Migrated all handlers to `Arc<AppState>` — existing tests still pass.
+- `lib.rs` re-exports `AppState` via `pub use api::AppState` so `main.rs` import `dman_server::AppState` continues to work.
+- **PathBuf not needed in lib.rs directly** — removed the `use std::path::PathBuf` from top-level imports; it's only needed inside `#[cfg(test)] mod tests { use std::path::PathBuf; }`.
+- Category filtering via JOIN: `SELECT DISTINCT i.* FROM images i JOIN annotations a ON a.image_id = i.id JOIN categories c ON c.id = a.category_id WHERE i.dataset_id = ? AND c.name = ?`
+- `DatasetService::inspect()` handles all stats in one call (image_count, annotation_count, categories).
+- `VirtualDatasetService::list(db)` and `::get(db, name)` are clean public API — no extra setup needed.
+- Test isolation: `Database::open(&catalog.join("catalog.db"))` in each test creates a real on-disk catalog in tempdir; `drop(db)` before firing HTTP request releases the connection.
+- **`--diff-filter=A`** in git log shows newly Added files from all commits; useful for verifying new files are tracked.
+
+### Test Results
+13 API tests pass, 18 total server tests pass (5 pre-existing + 13 new), 0 regressions.
