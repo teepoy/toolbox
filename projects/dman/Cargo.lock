@@ -1084,6 +1084,7 @@ dependencies = [
  "colored",
  "comfy-table",
  "dman-core",
+ "dman-python",
  "dman-server",
  "predicates",
  "serde_json",

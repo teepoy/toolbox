@@ -89,6 +89,22 @@ fn extract_str_field<'a>(content: &'a str, field: &str) -> Option<String> {
 use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
+#[pymodule]
+fn dman_python(m: &Bound<'_, pyo3::types::PyModule>) -> PyResult<()> {
+    use sdk::builder::python_impl::{
+        create_dataset, update_dataset, DmanDatasetBuilder, DmanDatasetUpdater,
+    };
+    use sdk::loader::{load_dataset, DmanDataset};
+    m.add_function(wrap_pyfunction!(load_dataset, m)?)?;
+    m.add_function(wrap_pyfunction!(create_dataset, m)?)?;
+    m.add_function(wrap_pyfunction!(update_dataset, m)?)?;
+    m.add_class::<DmanDataset>()?;
+    m.add_class::<DmanDatasetBuilder>()?;
+    m.add_class::<DmanDatasetUpdater>()?;
+    Ok(())
+}
+
+#[cfg(feature = "python")]
 pub fn load_plugin_with_python(path: &Path) -> Result<PluginInfo> {
     use pyo3::types::PyDictMethods;
     use std::ffi::CString;

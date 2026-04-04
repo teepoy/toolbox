@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 python = ["dep:pyo3"]
 
 [dependencies]
-pyo3 = { workspace = true, optional = true }
+pyo3 = { version = "0.28", features = ["auto-initialize"], optional = true }
 dman-core = { path = "../core" }
 walkdir = { workspace = true }
 serde = { workspace = true }

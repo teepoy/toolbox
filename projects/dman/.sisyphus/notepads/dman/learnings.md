@@ -860,3 +860,33 @@ format!("{}_{:08x}.jpg", image_id, hash)
 - `cargo test -p dman-python --features python -- embeddings` passed.
 - `cargo build --workspace` passed.
 - `cargo build -p dman-cli --features python` passed.
+
+## T34: Python SDK — Dataset Builder/Updater (2026-04-05)
+
+### Key Findings
+
+- **`#[pyclass(unsendable)]`** is REQUIRED for structs that hold `Database` (which contains `rusqlite::Connection` with `RefCell` internals not `Sync`). Without it: `error[E0277]: RefCell<Option<...>> cannot be shared between threads safely`. The existing `loader.rs` doesn't hold a `Database` in the struct, so this issue isn't visible there.
+- `pub mod python_impl` (not `mod python_impl`) is needed so unit tests outside the module can import internal types like `PendingCategory` and `UpdateOp` via `use super::python_impl::...`.
+- `DmanDatasetUpdater::add_image` Python method returns `-1` as a sentinel (real IDs are assigned during `apply()`); `add_image_internal` returns the actual DB id immediately — this separation is intentional.
+- `DatasetService::register()` requires path to exist on disk. `DmanDatasetBuilder::build_internal()` creates a temp dir: `std::env::temp_dir().join(format!("dman-builder-{}", name))`.
+- The `#[pymodule]` function must live in `lib.rs` — the crate had none before T34; adding one is part of the task.
+- `DmanDataset` from `loader.rs` is returned directly by `build()` and `apply()` — `use crate::sdk::loader::DmanDataset` and construct it via `DmanDataset { name, db }`.
+- PyO3 0.28: use `.cast::<T>()` NOT `.downcast::<T>()`. Use `|e|` (no type annotation) NOT `|e: PyErr|` in `map_err` closures after `.cast()` — explicit `PyErr` annotation causes E0631 type mismatch.
+
+### Transaction Pattern Used
+```rust
+db.conn.execute("BEGIN IMMEDIATE", [])?;
+let result = (|| -> crate::Result<()> { ... })();
+match result {
+    Ok(_) => { db.conn.execute("COMMIT", [])?; }
+    Err(e) => { let _ = db.conn.execute("ROLLBACK", []); return Err(e); }
+}
+```
+
+### Files Changed
+- `crates/python/src/sdk/builder.rs` — new (~811 lines, 9 tests)
+- `crates/python/src/sdk/mod.rs` — added `pub mod builder;`
+- `crates/python/src/lib.rs` — added `#[pymodule]` registering all public classes/functions
+
+### Test Results
+9 builder tests pass, 31 total dman-python tests pass, 0 failures.

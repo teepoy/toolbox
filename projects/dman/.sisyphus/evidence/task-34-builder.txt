@@ -1,0 +1,53 @@
+Task: T34 — Python SDK Dataset Builder/Updater
+Date: 2026-04-05
+Status: COMPLETE
+
+## Files Created/Modified
+
+- CREATED:  crates/python/src/sdk/builder.rs  (~811 lines)
+- MODIFIED: crates/python/src/sdk/mod.rs      (added `pub mod builder;`)
+- MODIFIED: crates/python/src/lib.rs           (added #[pymodule] registering all classes/functions)
+
+## Implementation Summary
+
+### DmanDatasetBuilder (pyclass, unsendable)
+- `__new__(name, schema_path=None)` — opens in-memory DB, registers dataset
+- `add_image(file_name, width=None, height=None)` — stages image
+- `add_annotation(image_file_name, category_name, bbox, score=None)` — stages annotation
+- `set_category(name, supercategory=None)` — stages category
+- `build()` → DmanDataset — commits all staged data in a single transaction; rolls back on any error
+
+### DmanDatasetUpdater (pyclass, unsendable)
+- `new_with_db(dataset_name, db_path)` — loads existing dataset from DB path
+- `add_image(file_name, width=None, height=None)` → -1 sentinel
+- `add_annotation(image_file_name, category_name, bbox, score=None)` — stages annotation
+- `remove_image(file_name)` — stages removal
+- `apply()` → DmanDataset — applies all staged ops in a transaction; rolls back on error
+
+### Python functions registered
+- `create_dataset(name, images, annotations, categories=None, schema_path=None)` → DmanDataset
+- `update_dataset(dataset_name, db_path, add_images=None, add_annotations=None, remove_images=None)` → DmanDataset
+
+### Transaction pattern
+Both `build_internal()` and `apply_internal()` use:
+  BEGIN IMMEDIATE → operations → COMMIT / ROLLBACK on error
+
+## Test Results
+
+Command: cargo test -p dman-python --features python -- sdk::builder
+
+running 9 tests
+test sdk::builder::tests::builder_empty_dataset_works ... ok
+test sdk::builder::tests::updater_new_with_db_errors_for_missing_dataset ... ok
+test sdk::builder::tests::updater_apply_adds_annotation_with_category ... ok
+test sdk::builder::tests::updater_apply_removes_image_and_adds_new ... ok
+test sdk::builder::tests::builder_rollback_on_duplicate_name ... ok
+test sdk::builder::tests::updater_add_image_internal_returns_positive_id ... ok
+test sdk::builder::tests::builder_multiple_images_and_annotations ... ok
+test sdk::builder::tests::builder_registers_explicit_category ... ok
+test sdk::builder::tests::builder_creates_dataset_and_returns_dman_dataset ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.01s
+
+Full suite: cargo test -p dman-python --features python
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
