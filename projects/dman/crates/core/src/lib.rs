@@ -5,6 +5,8 @@ pub mod db;
 pub mod embeddings;
 pub mod error;
 pub mod formats;
+pub mod ops;
+pub mod predictions;
 pub mod schema;
 pub mod storage;
 pub mod types;
