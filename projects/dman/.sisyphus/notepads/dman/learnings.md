@@ -494,3 +494,44 @@ match result {
 
 ### Test Results
 8 transforms tests pass, 181 total pass (7 pre-existing patches failures), 0 regressions.
+
+## T25: Patch Extraction + Storage (2026-04-04)
+
+### Key Findings
+
+**BBox field names**: `width`/`height` not `w`/`h` — always verify actual type definition.
+**Patch type**: `bbox: BBox` (embedded, stored as JSON in DB), `file_path: Option<PathBuf>`, no `created_at`.
+**DB patches table**: `bbox TEXT NOT NULL` (JSON), `file_path TEXT` (nullable).
+
+**Corrupt fixture JPEGs**: The existing 1×1 JPEG fixtures in `tests/fixtures/coco/images/` fail with zune-jpeg ("Premature End of image"). Must create valid images in tests using `image::RgbImage::from_pixel(4, 4, ...)` in a tempdir.
+
+**image crate 0.25 API**:
+```rust
+use image::GenericImageView; // required for .dimensions()
+let img = image::open(path).map_err(|e| DmanError::StorageError(e.to_string()))?;
+let (img_w, img_h) = img.dimensions();
+let cropped = img.crop_imm(x, y, w, h);
+cropped.save(output_path).map_err(|e| DmanError::StorageError(e.to_string()))?;
+```
+
+**BBox hash for filename**:
+```rust
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+let mut hasher = DefaultHasher::new();
+bbox.x.to_bits().hash(&mut hasher); // hash f64 via bit representation
+...
+let hash = hasher.finish();
+format!("{}_{:08x}.jpg", image_id, hash)
+```
+
+**Pre-existing bug fixed**: `crates/core/src/ops/transforms.rs` had `format!("{path!r}")` which is invalid in Rust (Python repr syntax) — fixed with `format!("{:?}", path)`.
+
+### Files Changed
+- `crates/core/Cargo.toml` — added `image = "0.25"`
+- `crates/core/src/patches/mod.rs` — new (467 lines, 8 tests)
+- `crates/core/src/lib.rs` — added `pub mod patches;`
+- `crates/core/src/ops/transforms.rs` — fixed invalid format string bug
+
+### Test Results
+8 patches tests pass, 188 total tests pass, 0 failures.
