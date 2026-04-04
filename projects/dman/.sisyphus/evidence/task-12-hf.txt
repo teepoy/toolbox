@@ -1,0 +1,41 @@
+T12: HuggingFace Parquet Importer/Exporter — Evidence
+======================================================
+Date: 2026-04-04
+
+## Files Created/Modified
+- crates/core/src/formats/huggingface/mod.rs  (NEW, ~358 lines, 6 tests)
+- crates/core/src/formats/mod.rs              (MODIFIED — added pub mod huggingface; replaced stubs)
+- crates/core/Cargo.toml                      (MODIFIED — added arrow, parquet, walkdir deps)
+
+## HuggingFace-Specific Test Output
+running 6 tests
+test formats::huggingface::tests::test_importer_detects_hf_dir ... ok
+test formats::huggingface::tests::test_importer_does_not_detect_empty_dir ... ok
+test formats::huggingface::tests::test_import_fixture ... ok
+test formats::huggingface::tests::test_import_populates_file_name ... ok
+test formats::huggingface::tests::test_export_creates_parquet ... ok
+test formats::huggingface::tests::test_export_roundtrip_row_count ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; finished in 0.00s
+
+## Full dman-core Test Suite
+running 125 tests
+... (all pass) ...
+test result: ok. 125 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+Running tests/fixtures_test.rs
+running 3 tests
+test test_coco_fixture_is_valid_json ... ok
+test test_yolo_fixture_exists ... ok
+test test_schema_fixture_is_valid_toml ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Total: 128 tests pass, 0 failures.
+
+## Implementation Summary
+- HuggingFaceImporter: detect() walks dir for *.parquet; import() reads parquet via
+  ParquetRecordBatchReaderBuilder, extracts image filename from first matching column
+  (file_name / image / path / image_path), inserts rows in BEGIN IMMEDIATE transaction.
+- HuggingFaceExporter: export() queries all images for dataset, builds Arrow RecordBatch
+  with columns file_name/file_path/metadata, writes to {output}/data/train-00000-of-00001.parquet.
+- Replaced HuggingFaceStubImporter/HuggingFaceStubExporter in formats/mod.rs with real impls.

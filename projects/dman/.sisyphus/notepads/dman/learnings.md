@@ -253,3 +253,69 @@ let paths: Vec<String> = stmt
 
 ### Test Results
 11 tests pass, 0 failures, 0 warnings.
+
+## T12: HuggingFace Parquet Importer/Exporter (2026-04-04)
+
+### Dependencies Added to crates/core/Cargo.toml
+- `arrow = { workspace = true }` — Arrow array/record batch types
+- `parquet = { workspace = true }` — Parquet read/write
+- `walkdir = { workspace = true }` — Recursive directory traversal (was already present from T13, no-op re-add)
+
+### Arrow `is_null` Requires Trait Import
+- `StringArray::is_null(idx)` requires `use arrow::array::Array;` to be in scope.
+- Compiler error: `no method named 'is_null' found` with hint `trait Array which provides is_null is implemented but not in scope`.
+
+### Parquet Reading Pattern (arrow/parquet 58.1)
+```rust
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use arrow::array::{Array, StringArray};
+
+let file = File::open(&parquet_path)?;
+let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+    .map_err(|e| DmanError::FormatError(e.to_string()))?;
+let mut reader = builder.build()
+    .map_err(|e| DmanError::FormatError(e.to_string()))?;
+for batch in reader { ... }
+```
+
+### Parquet Writing Pattern (arrow/parquet 58.1)
+```rust
+use arrow::array::StringArray;
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+use parquet::arrow::ArrowWriter;
+
+let schema = Arc::new(Schema::new(vec![
+    Field::new("file_name", DataType::Utf8, false),
+    ...
+]));
+let batch = RecordBatch::try_new(schema.clone(), vec![
+    Arc::new(StringArray::from(col_data)),
+    ...
+]).map_err(|e| DmanError::FormatError(e.to_string()))?;
+let file = File::create(&out_path)?;
+let mut writer = ArrowWriter::try_new(file, schema, None)
+    .map_err(|e| DmanError::FormatError(e.to_string()))?;
+writer.write(&batch).map_err(|e| DmanError::FormatError(e.to_string()))?;
+writer.close().map_err(|e| DmanError::FormatError(e.to_string()))?;
+```
+
+### Image Filename Column Detection
+- HuggingFace datasets use different column names for image paths: `file_name`, `image`, `path`, `image_path`.
+- Probe each candidate name via `batch.schema().index_of(name)` and use the first match.
+
+### Replacing Stubs in formats/mod.rs
+- Removed `HuggingFaceStubImporter` and `HuggingFaceStubExporter` structs entirely.
+- Updated `default_registry()` to use `huggingface::HuggingFaceImporter` and `huggingface::HuggingFaceExporter`.
+- Existing stub-detection tests (`stubs_detect_returns_false_for_any_path`) still pass because `/tmp/fake` contains no `.parquet` files.
+
+### Fixture Details
+- `crates/core/tests/fixtures/huggingface/data/train-00000-of-00001.parquet` — 3 rows, columns: `image_path` (Utf8), `label` (Utf8).
+
+### Files Changed
+- `crates/core/Cargo.toml` — added arrow, parquet, walkdir deps
+- `crates/core/src/formats/huggingface/mod.rs` — new (~358 lines, 6 tests)
+- `crates/core/src/formats/mod.rs` — added `pub mod huggingface;`, replaced stubs with real structs
+
+### Test Results
+6 HuggingFace tests pass, 114 total tests pass, 0 failures, 0 warnings.
