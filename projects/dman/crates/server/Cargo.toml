@@ -12,6 +12,8 @@ serde_json = { workspace = true }
 rusqlite = { workspace = true }
 dman-core = { path = "../core" }
 dirs = "5"
+rust-embed = "8.11"
+mime_guess = "2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

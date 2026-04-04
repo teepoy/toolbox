@@ -1776,7 +1776,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/virtual_dataset/transforms.rs`
   - Pre-commit: `cargo test -p dman-core -- virtual_dataset::transforms`
 
-- [ ] 19. Materialize Command
+ - [x] 19. Materialize Command
 
   **What to do**:
   - Create `crates/core/src/virtual_dataset/materialize.rs`
@@ -2066,7 +2066,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/server/src/main.rs`, `crates/server/src/lib.rs`, `crates/server/src/routes/`
   - Pre-commit: `cargo test -p dman-server`
 
-- [ ] 23. REST API Endpoints
+ - [x] 23. REST API Endpoints
 
   **What to do**:
   - Add REST API routes to the axum server:
@@ -2535,7 +2535,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/server/frontend/src/`
   - Pre-commit: `cd crates/server/frontend && npm run build`
 
-- [ ] 29. TUI Shell — Ratatui App + Dataset Browser
+ - [x] 29. TUI Shell — Ratatui App + Dataset Browser
 
   **What to do**:
   - Create `crates/tui/src/main.rs` with ratatui application:

@@ -6,16 +6,19 @@ use axum::{
     Router,
     body::Body,
     extract::{Path, State},
-    http::{HeaderValue, Response, StatusCode, header},
-    response::{Html, IntoResponse},
+    http::{HeaderValue, Response, StatusCode, Uri, header},
+    response::IntoResponse,
     routing::get,
 };
+use rust_embed::RustEmbed;
 use serde_json::json;
 use tower_http::cors::CorsLayer;
 
 pub use api::AppState;
 
-const SPA_HTML: &str = r#"<html><body><div id="root">dman web UI (coming soon)</div></body></html>"#;
+#[derive(RustEmbed)]
+#[folder = "frontend/dist/"]
+struct Frontend;
 
 fn content_type_for_extension(ext: &str) -> &'static str {
     match ext.to_ascii_lowercase().as_str() {
@@ -70,8 +73,47 @@ async fn image_handler(
     }
 }
 
-async fn spa_fallback() -> impl IntoResponse {
-    Html(SPA_HTML)
+async fn spa_fallback(uri: Uri) -> Response<Body> {
+    let path = uri.path().trim_start_matches('/');
+
+    if let Some(content) = Frontend::get(path) {
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(Body::from(content.data.into_owned()))
+            .unwrap_or_else(|_| {
+                Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .expect("static response build")
+            })
+    } else {
+        match Frontend::get("index.html") {
+            Some(index) => Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(Body::from(index.data.into_owned()))
+                .unwrap_or_else(|_| {
+                    Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Body::empty())
+                        .expect("static response build")
+                }),
+            None => Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(Body::from(
+                    r#"<html><body><div id="root">dman</div></body></html>"#,
+                ))
+                .unwrap_or_else(|_| {
+                    Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Body::empty())
+                        .expect("static response build")
+                }),
+        }
+    }
 }
 
 pub async fn create_router(state: AppState) -> Router {
@@ -87,7 +129,7 @@ pub async fn create_router(state: AppState) -> Router {
         .route("/api/virtual-datasets", get(api::list_virtual_datasets))
         .route("/api/virtual-datasets/{name}", get(api::get_virtual_dataset))
         .route("/images/{dataset_id}/{filename}", get(image_handler))
-        .fallback(get(spa_fallback))
+        .fallback(spa_fallback)
         .with_state(state)
         .layer(CorsLayer::permissive())
 }
@@ -167,7 +209,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body_str = std::str::from_utf8(&body).unwrap();
-        assert!(body_str.contains("dman web UI"));
+        assert!(body_str.contains("dman"), "SPA fallback should contain 'dman'");
     }
 
     #[tokio::test]

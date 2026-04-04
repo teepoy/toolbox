@@ -595,3 +595,36 @@ format!("{}_{:08x}.jpg", image_id, hash)
 
 ### Test Results
 8 tests pass, 0 failures.
+
+## T26: React SPA Scaffold
+
+### Approach
+- Vite + React + TypeScript scaffold via `npm create vite@latest . -- --template react-ts`
+- Tailwind CSS: `npm install -D tailwindcss @tailwindcss/vite` + added plugin to vite.config.ts
+- React Router: `npm install react-router-dom`
+- `@tailwindcss/vite` plugin requires `@import "tailwindcss";` in index.css (v4 syntax)
+- rust-embed 8.11 + mime_guess 2 added to `crates/server/Cargo.toml`
+
+### rust-embed Pattern (axum 0.8)
+- `#[derive(RustEmbed)] #[folder = "frontend/dist/"] struct Frontend;`
+- Fallback handler takes `uri: Uri` (not `get(handler)` wrapper — use `.fallback(spa_fallback)` directly)
+- `content.data.into_owned()` converts `Cow<[u8]>` to owned bytes for `Body::from()`
+- `mime_guess::from_path(path).first_or_octet_stream()` handles MIME types
+- When `Frontend::get("index.html")` returns `None` (no dist/ built), return a minimal HTML fallback with `"dman"` string
+
+### build.rs Pattern
+- Use `cargo:warning=...` to warn about missing dist/ without panicking
+- `cargo:rerun-if-changed=frontend/dist` + `frontend/src` for incremental rebuilds
+
+### Test Adaptation
+- Old test checked `body_str.contains("dman web UI")` — updated to `body_str.contains("dman")` since index.html has `<title>dman</title>` and the no-dist fallback also emits `"dman"`
+- All 18 tests pass (5 lib.rs + 13 api.rs)
+
+### Files Changed
+- `crates/server/Cargo.toml` — added rust-embed = "8.11", mime_guess = "2"
+- `crates/server/build.rs` — new file: warns if frontend/dist/index.html missing
+- `crates/server/src/lib.rs` — rust-embed handler replaces static SPA_HTML const; test updated
+- `crates/server/frontend/` — full Vite scaffold (new directory)
+
+### Test Results
+18 tests pass, 0 failures.
