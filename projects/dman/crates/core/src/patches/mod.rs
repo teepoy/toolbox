@@ -220,8 +220,13 @@ mod tests {
     use crate::storage::StorageManager;
     use crate::types::BBox;
 
-    fn fixture_jpg() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/coco/images/img001.jpg")
+    fn make_test_image(dir: &std::path::Path) -> PathBuf {
+        let path = dir.join("test_img.jpg");
+        let img = image::RgbImage::from_pixel(4, 4, image::Rgb([128u8, 64, 200]));
+        image::DynamicImage::ImageRgb8(img)
+            .save(&path)
+            .expect("save test image");
+        path
     }
 
     fn insert_image(db: &Database, src_path: &std::path::Path) -> (i64, i64) {
@@ -244,7 +249,7 @@ mod tests {
         db.conn
             .execute(
                 "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                rusqlite::params![dataset_id, "img001.jpg", path_str],
+                rusqlite::params![dataset_id, "test_img.jpg", path_str],
             )
             .expect("insert image");
         let image_id: i64 = db
@@ -259,8 +264,8 @@ mod tests {
         BBox {
             x: 0.0,
             y: 0.0,
-            width: 1.0,
-            height: 1.0,
+            width: 4.0,
+            height: 4.0,
         }
     }
 
@@ -270,7 +275,7 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &fixture_jpg());
+        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
         let patch = PatchService::extract(
             &db,
             &storage,
@@ -290,7 +295,7 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &fixture_jpg());
+        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
         let bbox = full_bbox();
         let patch =
             PatchService::extract(&db, &storage, image_id, &bbox, &tmp.path().join("out")).unwrap();
@@ -314,7 +319,7 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &fixture_jpg());
+        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
         let patch = PatchService::extract(
             &db,
             &storage,
@@ -326,8 +331,8 @@ mod tests {
 
         let saved = image::open(patch.file_path.unwrap()).expect("open saved patch");
         let (w, h) = saved.dimensions();
-        assert_eq!(w, 1);
-        assert_eq!(h, 1);
+        assert_eq!(w, 4);
+        assert_eq!(h, 4);
     }
 
     #[test]
@@ -336,7 +341,7 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &fixture_jpg());
+        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
         PatchService::extract(
             &db,
             &storage,
@@ -357,7 +362,7 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (dataset_id, image_id) = insert_image(&db, &fixture_jpg());
+        let (dataset_id, image_id) = insert_image(&db, &make_test_image(tmp.path()));
         PatchService::extract(
             &db,
             &storage,
@@ -378,7 +383,7 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &fixture_jpg());
+        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
         let patch = PatchService::extract(
             &db,
             &storage,
@@ -411,7 +416,7 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (dataset_id, image_id) = insert_image(&db, &fixture_jpg());
+        let (dataset_id, image_id) = insert_image(&db, &make_test_image(tmp.path()));
         let bbox_json = serde_json::to_string(&full_bbox()).unwrap();
         db.conn
             .execute(

@@ -1,0 +1,36 @@
+## T21: Data Transform Operations — Evidence
+
+### Files Created
+- `crates/core/src/ops/transforms.rs` — 806 lines, 8 tests
+- `crates/core/src/ops/mod.rs` — `pub mod transforms;` prepended (by T21)
+
+### Files Modified
+- `crates/core/src/lib.rs` — `pub mod ops;` added
+
+### Test Results
+```
+running 8 tests
+test ops::transforms::tests::relabel_renames_categories ... ok
+test ops::transforms::tests::sample_invalid_ratio_returns_error ... ok
+test ops::transforms::tests::filter_metadata_eq_matches_key_value ... ok
+test ops::transforms::tests::filter_has_annotations_keeps_annotated_only ... ok
+test ops::transforms::tests::filter_category_keeps_matching_only ... ok
+test ops::transforms::tests::sample_ratio_produces_expected_count ... ok
+test ops::transforms::tests::sample_ratio_deterministic ... ok
+test ops::transforms::tests::resize_returns_error_when_no_tool_available ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 180 filtered out; finished in 0.13s
+```
+
+### API Implemented
+- `DatasetTransforms::filter_dataset(db, name, column, op, value, output_name) -> Result<Dataset>`
+- `DatasetTransforms::sample_dataset(db, name, ratio, seed, output_name) -> Result<Dataset>`
+- `DatasetTransforms::relabel(db, name, mapping) -> Result<()>`
+- `DatasetTransforms::resize_images(db, storage, name, width, height) -> Result<()>`
+
+### Notes
+- FilterOp is `Eq/Ne/Gt/Lt/Gte/Lte/Contains/In` (not HasAnnotations/CategoryIs as spec implied)
+- Filtering uses column-based dispatch matching virtual_dataset pattern
+- relabel updates `categories.name` (not `annotations.category TEXT` — real schema uses FK)
+- resize shells out to ImageMagick `convert` or Python PIL; returns StorageError if neither available
+- 7 pre-existing patches::tests failures unrelated to this task
