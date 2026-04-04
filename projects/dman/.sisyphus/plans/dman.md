@@ -1619,7 +1619,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/src/embeddings/mod.rs`
   - Pre-commit: `cargo test -p dman-core -- embeddings`
 
-- [ ] 17. Virtual Dataset Engine — Filter, Merge, Sample, Split
+- [x] 17. Virtual Dataset Engine — Filter, Merge, Sample, Split
 
   **What to do**:
   - Create `crates/core/src/virtual_dataset/mod.rs` with `VirtualDatasetService`

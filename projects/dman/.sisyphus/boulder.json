@@ -18,7 +18,8 @@
     "ses_2a7c93964ffeNhOFDcFxvItUlx",
     "ses_2a7c87f4bffekx9Ih5c815n6Fr",
     "ses_2a7c8d1ddffeX5dLHg3ZdG7Gf5",
-    "ses_2a7c84275ffelA0W56sJ7brOAv"
+    "ses_2a7c84275ffelA0W56sJ7brOAv",
+    "ses_2a7bbc91affeCusZmzlNDqcyvE"
   ],
   "plan_name": "dman",
   "agent": "atlas",
@@ -58,6 +59,15 @@
       "agent": "Sisyphus-Junior",
       "category": "unspecified-high",
       "updated_at": "2026-04-04T11:24:03.367Z"
+    },
+    "todo:17": {
+      "task_key": "todo:17",
+      "task_label": "17",
+      "task_title": "Virtual Dataset Engine — Filter, Merge, Sample, Split",
+      "session_id": "ses_2a7bbc91affeCusZmzlNDqcyvE",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-04-04T11:38:55.866Z"
     }
   }
 }

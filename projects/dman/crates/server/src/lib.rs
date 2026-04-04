@@ -1,0 +1,218 @@
+use std::path::PathBuf;
+
+use axum::{
+    Router,
+    body::Body,
+    extract::{Path, State},
+    http::{HeaderValue, Response, StatusCode, header},
+    response::{Html, IntoResponse},
+    routing::get,
+};
+use serde_json::json;
+use tower_http::cors::CorsLayer;
+
+const SPA_HTML: &str = r#"<html><body><div id="root">dman web UI (coming soon)</div></body></html>"#;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub catalog_path: PathBuf,
+}
+
+fn content_type_for_extension(ext: &str) -> &'static str {
+    match ext.to_ascii_lowercase().as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        _ => "application/octet-stream",
+    }
+}
+
+async fn health_handler() -> impl IntoResponse {
+    axum::Json(json!({"status": "ok"}))
+}
+
+async fn image_handler(
+    State(state): State<AppState>,
+    Path((dataset_id, filename)): Path<(String, String)>,
+) -> Response<Body> {
+    // Images are stored at {catalog_path}/data/{dataset_id}/images/{filename}
+    let image_path = state
+        .catalog_path
+        .join("data")
+        .join(&dataset_id)
+        .join("images")
+        .join(&filename);
+
+    match tokio::fs::read(&image_path).await {
+        Ok(bytes) => {
+            let ext = std::path::Path::new(&filename)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            let content_type = content_type_for_extension(ext);
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(content_type),
+                )
+                .body(Body::from(bytes))
+                .unwrap_or_else(|_| {
+                    Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Body::empty())
+                        .expect("static response build")
+                })
+        }
+        Err(_) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+            .expect("404 response build"),
+    }
+}
+
+async fn spa_fallback() -> impl IntoResponse {
+    Html(SPA_HTML)
+}
+
+pub async fn create_router(state: AppState) -> Router {
+    Router::new()
+        .route("/api/health", get(health_handler))
+        .route("/images/{dataset_id}/{filename}", get(image_handler))
+        .fallback(get(spa_fallback))
+        .with_state(state)
+        .layer(CorsLayer::permissive())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use axum::body::to_bytes;
+    use axum::http::{Request, StatusCode};
+    use tempfile::tempdir;
+    use tower::ServiceExt;
+
+    use super::*;
+
+    async fn make_app(catalog_path: PathBuf) -> Router {
+        create_router(AppState { catalog_path }).await
+    }
+
+    #[tokio::test]
+    async fn test_health_endpoint() {
+        let tmp = tempdir().unwrap();
+        let app = make_app(tmp.path().to_path_buf()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
+    }
+
+    #[tokio::test]
+    async fn test_missing_image_404() {
+        let tmp = tempdir().unwrap();
+        let app = make_app(tmp.path().to_path_buf()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/images/999/nonexistent.jpg")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_spa_fallback() {
+        let tmp = tempdir().unwrap();
+        let app = make_app(tmp.path().to_path_buf()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/some/page")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_str = std::str::from_utf8(&body).unwrap();
+        assert!(body_str.contains("dman web UI"));
+    }
+
+    #[tokio::test]
+    async fn test_image_served_with_correct_content_type() {
+        let tmp = tempdir().unwrap();
+        // Create a fake image file at the expected path
+        let img_dir = tmp.path().join("data").join("1").join("images");
+        std::fs::create_dir_all(&img_dir).unwrap();
+        let mut f = std::fs::File::create(img_dir.join("test.png")).unwrap();
+        f.write_all(b"\x89PNG\r\n\x1a\n").unwrap();
+
+        let app = make_app(tmp.path().to_path_buf()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/images/1/test.png")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let ct = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert_eq!(ct, "image/png");
+    }
+
+    #[tokio::test]
+    async fn test_cors_header_present() {
+        let tmp = tempdir().unwrap();
+        let app = make_app(tmp.path().to_path_buf()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/api/health")
+                    .header("Origin", "http://localhost:3000")
+                    .header("Access-Control-Request-Method", "GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let has_cors = response
+            .headers()
+            .contains_key("access-control-allow-origin");
+        assert!(has_cors, "CORS headers should be present");
+    }
+}

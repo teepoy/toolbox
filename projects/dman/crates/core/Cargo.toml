@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = { workspace = true }
 arrow = { workspace = true }
 dirs = "5"
+image = "0.25"
 parquet = { workspace = true }
 rusqlite = { workspace = true }
 rusqlite_migration = { workspace = true }

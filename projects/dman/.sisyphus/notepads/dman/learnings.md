@@ -341,3 +341,40 @@ writer.close().map_err(|e| DmanError::FormatError(e.to_string()))?;
 
 ### Test Results
 11/11 COCO tests pass, 125/125 full suite passes, 0 failures.
+
+## T17: Virtual Dataset Engine (2026-04-04)
+
+### Actual Types vs Spec Discrepancy
+- Task spec described `FilterOp::HasAnnotations/CategoryIs/MetadataEq` — actual `FilterOp` in types/mod.rs is generic: `Eq/Ne/Gt/Lt/Gte/Lte/Contains/In`.
+- Task spec described `VirtualDatasetDef::Source(i64)` — actual type has no Source variant; initial images come from `VirtualDataset.source_datasets: Vec<i64>`.
+- `VirtualDataset` struct has no `created_at` field despite DB having it.
+- `VirtualDatasetDef::Sample` only has `ratio: f64` — no `seed` field in actual type.
+- `VirtualDatasetDef::Merge` uses `datasets: Vec<i64>` (not `sources: Vec<VirtualDatasetDef>`).
+
+### Filter Column Dispatch Pattern
+Column-based dispatch on `VirtualDatasetDef::Filter { column, ... }`:
+- `"annotated"` → SQL `SELECT DISTINCT image_id FROM annotations WHERE image_id IN (...)`
+- `"category"` / `"category_name"` → SQL JOIN annotations+categories by name
+- `"metadata.KEY"` → in-memory `serde_json::Value` comparison
+- anything else → in-memory field comparison via match on column name
+
+### rusqlite params_from_iter with Box<dyn ToSql>
+When building dynamic SQL with variable-length params:
+```rust
+let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(cat_name.to_string())];
+for id in &image_ids { params_vec.push(Box::new(*id)); }
+stmt.query_map(rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())), ...)?
+```
+
+### Deterministic Sample Without Seed
+Since `Sample { ratio: f64 }` has no seed field, use `hash_id(id, 0)` with a constant seed for deterministic but reproducible ordering.
+
+### Circular Reference Detection (V1)
+`check_no_cycle_for_new(db, target_name, vds_id, &mut visited)` walks the existing VDS graph to verify no existing VDS with `target_name` is reachable from `vds_id`. Since new VDS doesn't exist yet at creation time, true A→B→A cycles can only be triggered by testing with existing IDs.
+
+### Files Changed
+- `crates/core/src/virtual_dataset/mod.rs` — new (~980 lines, 13 tests)
+- `crates/core/src/lib.rs` — added `pub mod virtual_dataset;`
+
+### Test Results
+13 virtual_dataset tests pass, 138 total, 0 failures, 0 warnings.

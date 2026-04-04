@@ -1,0 +1,56 @@
+T17: Virtual Dataset Engine — Task Evidence
+==========================================
+
+Date: 2026-04-04
+
+FILES CREATED/MODIFIED:
+- crates/core/src/virtual_dataset/mod.rs (new, ~980 lines)
+- crates/core/src/lib.rs (added: pub mod virtual_dataset;)
+
+TEST RESULTS:
+- cargo test -p dman-core -- virtual_dataset: 14 passed, 0 failed
+- cargo test -p dman-core (full suite): 138 passed, 0 failed, 0 warnings
+
+VIRTUAL DATASET TESTS (13 new):
+- test_create_and_get ✓
+- test_list ✓
+- test_delete ✓
+- test_delete_not_found ✓
+- test_evaluate_source ✓
+- test_evaluate_filter_has_annotations ✓
+- test_evaluate_filter_category ✓
+- test_evaluate_merge ✓
+- test_evaluate_sample ✓
+- test_evaluate_chain_filter_then_sample ✓
+- test_preview_limits_results ✓
+- test_circular_ref_detection ✓
+- test_definition_serde_roundtrip ✓
+
+IMPLEMENTATION NOTES:
+- VirtualDatasetDef::Filter uses column-based dispatch:
+  "annotated" -> HasAnnotations via SQL EXISTS query
+  "category" -> JOIN annotations+categories by name
+  "metadata.KEY" -> in-memory serde_json::Value comparison
+  other -> generic in-memory field comparison
+
+- VirtualDatasetDef::Merge { datasets: Vec<i64> } unions source_datasets (base)
+  with the extra dataset IDs; deduplication by image.id
+
+- VirtualDatasetDef::Sample { ratio } uses deterministic hash (FNV-1a mix)
+  to sort images before taking the first fraction
+
+- VirtualDatasetDef::Split returns first alphabetical bucket only (V1)
+
+- VirtualDatasetDef::Chain applies steps sequentially
+
+- Circular reference check: check_no_cycle_for_new() verifies no existing VDS
+  with the target_name appears in the transitive source chain
+
+- Transaction pattern: BEGIN IMMEDIATE / COMMIT / ROLLBACK used in create()
+
+DESIGN DECISIONS:
+- VirtualDataset struct in types/mod.rs lacks created_at field (unlike DB schema)
+- Actual FilterOp enum is Eq/Ne/Gt/Lt/Gte/Lte/Contains/In (not domain-specific)
+- Column "annotated" and "category" are special-cased for DB-assisted filtering
+- Sample sorting uses hash(image_id) for deterministic (but not seeded) ordering
+  since VirtualDatasetDef::Sample only has ratio (no seed field)

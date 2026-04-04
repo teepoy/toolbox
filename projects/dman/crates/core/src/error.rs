@@ -51,6 +51,9 @@ pub enum DmanError {
 
     #[error("Configuration error: {0}")]
     ConfigError(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
 pub type Result<T> = std::result::Result<T, DmanError>;
