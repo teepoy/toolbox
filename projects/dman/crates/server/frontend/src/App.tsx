@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import Gallery from './pages/Gallery'
+import Detail from './pages/Detail'
 import './App.css'
 
 function Home() {
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/datasets" element={<Gallery />} />
           <Route path="/datasets/:name" element={<Gallery />} />
+          <Route path="/datasets/:datasetName/images/:imageId" element={<Detail />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<Home />} />
         </Routes>

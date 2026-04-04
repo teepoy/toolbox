@@ -267,7 +267,8 @@ export default function Gallery() {
           {images.map((img) => (
             <div
               key={img.id}
-              className="group relative aspect-square overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
+              onClick={() => navigate(`/datasets/${selectedDataset!.name}/images/${img.id}`)}
+              className="group relative aspect-square overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors cursor-pointer"
             >
               <img
                 data-testid="gallery-image"
