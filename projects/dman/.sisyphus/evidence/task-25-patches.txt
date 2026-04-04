@@ -1,0 +1,28 @@
+Task: T25 - Patches (Image Crop) Extraction + Storage
+Date: 2026-04-04
+Status: COMPLETE
+
+Files changed:
+  - crates/core/Cargo.toml: added image = "0.25"
+  - crates/core/src/lib.rs: added pub mod patches;
+  - crates/core/src/patches/mod.rs: new (467 lines, 8 tests)
+  - crates/core/src/ops/transforms.rs: fixed pre-existing format string bug {path!r} → {:?}
+
+Test results:
+  patches::tests::extract_creates_file ... ok
+  patches::tests::extract_db_record ... ok
+  patches::tests::extract_output_dimensions ... ok
+  patches::tests::get_by_image_returns_patches ... ok
+  patches::tests::get_by_dataset_returns_patches ... ok
+  patches::tests::delete_removes_file ... ok
+  patches::tests::extract_batch_creates_patches ... ok
+  patches::tests::get_by_image_empty_when_none ... ok
+
+Full suite: 188 passed, 0 failed
+
+Methods implemented on PatchService:
+  - extract(db, storage, image_id, bbox, output_dir) -> Result<Patch>
+  - extract_batch(db, storage, dataset_id, output_dir) -> Result<Vec<Patch>>
+  - get_by_image(db, image_id) -> Result<Vec<Patch>>
+  - get_by_dataset(db, dataset_id) -> Result<Vec<Patch>>
+  - delete_patch(db, storage, patch_id) -> Result<()>

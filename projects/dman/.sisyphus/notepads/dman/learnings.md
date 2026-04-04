@@ -468,3 +468,29 @@ match result {
 
 ### Test Results
 11 ops tests pass, 173 total pass, 7 pre-existing patches failures (JPEG decode), 0 regressions.
+
+## T21: Data Transform Operations (filter, sample, relabel, resize) (2026-04-04)
+
+### Key Findings
+
+**FilterOp reality**: Actual `FilterOp` enum is `Eq/Ne/Gt/Lt/Gte/Lte/Contains/In` — not `HasAnnotations/CategoryIs/MetadataEq` as the task spec implied. Used column-based dispatch matching the virtual_dataset pattern.
+
+**relabel uses categories table**: `annotations` has `category_id` FK to `categories.name`, NOT a `category TEXT` field. Relabeling means `UPDATE categories SET name = ?1 WHERE name = ?2 AND dataset_id = ?3`.
+
+**`pub mod transforms;` placement**: T20 created `ops/mod.rs` without `pub mod transforms;`. T21 prepended the declaration to the top of that file.
+
+**Parallel task race condition**: T20 and T22 ran in parallel and modified the same files (ops/mod.rs, transforms.rs, lib.rs). By the time T21 ran, transforms.rs was already committed by T20's parallel run. T21 confirmed all 8 tests pass.
+
+**resize_images**: Shells out to `convert` (ImageMagick) first, then `python3 -c "from PIL import Image; ..."`. If neither available (or both fail), returns `DmanError::StorageError`. Non-existent files also cause failure (which counts as "tool not available").
+
+**Python format string in Rust**: Can't use `{path!r}` in Rust format strings (no Python repr syntax). Use `format!("{:?}", path)` as `repr_open` parameter — this adds quotes around the string.
+
+**`cargo test` filter path**: Use `-- ops::transforms::tests` to target the submodule; plain `-- ops::transforms` also works.
+
+### Files Changed
+- `crates/core/src/ops/transforms.rs` — new (806 lines, 8 tests)
+- `crates/core/src/ops/mod.rs` — prepended `pub mod transforms;`
+- `crates/core/src/lib.rs` — added `pub mod ops;`
+
+### Test Results
+8 transforms tests pass, 181 total pass (7 pre-existing patches failures), 0 regressions.
