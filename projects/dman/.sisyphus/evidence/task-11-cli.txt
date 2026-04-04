@@ -1,0 +1,41 @@
+Dataset Manager — manage your ML datasets
+
+Usage: dman-cli <COMMAND>
+
+Commands:
+  init         Initialize the dman catalog (~/.dman or $DMAN_HOME)
+  add          Register a dataset with the catalog
+  list         List all registered datasets
+  inspect      Show detailed information about a dataset
+  remove       Remove a dataset from the catalog (does not delete files)
+  import       Import a dataset from a path (not yet implemented)
+  export       Export a dataset to a path (not yet implemented)
+  operate      Apply operations to a dataset (not yet implemented)
+  virtual      Manage virtual datasets (not yet implemented)
+  serve        Start the dman HTTP server (not yet implemented)
+  tui          Launch the terminal UI (not yet implemented)
+  materialize  Materialize a virtual dataset (not yet implemented)
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+---BUILD---
+---TESTS---
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 8 tests
+test help_shows_subcommands ... ok
+test help_exits_zero ... ok
+test list_without_init_exits_nonzero ... ok
+test stub_commands_exit_zero ... ok
+test init_exits_zero ... ok
+test init_creates_catalog_dir ... ok
+test list_after_init_shows_empty_message ... ok
+test add_and_list_dataset ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s

@@ -181,3 +181,52 @@ let paths: Vec<String> = stmt
 
 ### Test Results
 15 tests pass, 0 failures, 0 warnings.
+
+## T16 — Embeddings Storage
+
+### Schema Reality vs Spec
+- Task spec referenced `dataset_id` column in `embeddings` table and an `Embedding.dataset_id` field — neither exists in actual code.
+- Actual DB schema: `embeddings(id, image_id, model_name, vector BLOB, metadata TEXT)` — no `dataset_id`.
+- Actual `Embedding` type: `id: i64` (not `Option<i64>`), field is `model_name` (not `model`), no `dataset_id`.
+- Methods that filter by `dataset_id` (`list_by_dataset`, `has_embeddings`, `get_embedding_models`) use a JOIN through `images` table.
+
+### f32 BLOB Encoding
+- No `bytemuck` dep in project; used manual little-endian encoding:
+  - encode: `iter().flat_map(|f| f.to_le_bytes()).collect()`
+  - decode: `chunks_exact(4).map(|c| f32::from_le_bytes([c[0],c[1],c[2],c[3]])).collect()`
+- `f32::NAN` roundtrips correctly via bit-level comparison (`to_bits()` / `is_nan()`).
+
+### Files Changed
+- `crates/core/src/embeddings/mod.rs` — new (302 lines, 8 tests)
+- `crates/core/src/lib.rs` — added `pub mod embeddings;`
+
+### Test Results
+8 tests pass, 0 failures, 0 warnings.
+
+## T11 CLI Shell Learnings
+
+### assert_cmd integration tests must live in `tests/` not `src/main.rs`
+- `Command::cargo_bin("name")` requires `CARGO_BIN_EXE_*` env vars, which are only set for integration tests (files under `tests/`), not unit tests inside `src/`.
+- If placed inside `#[cfg(test)] mod tests { ... }` in main.rs, every test panics with `` `CARGO_BIN_EXE_dman` is unset ``.
+- Fix: move assert_cmd tests to `crates/cli/tests/cli.rs`.
+
+### Binary name must match package name in assert_cmd
+- `Command::cargo_bin("dman")` fails if the actual binary is `dman-cli` (as set in `[package] name`).
+- Use `Command::cargo_bin("dman-cli")` to match, or add `[[bin]] name = "dman"` to Cargo.toml.
+
+### clap `#[derive(Subcommand)]` needs `///` doc comments for help text
+- The `///` doc comments on enum variants and their fields are NOT memo-style agent comments — they are consumed by clap's derive macro to generate `--help` output. They are functionally required.
+
+### Catalog::open() vs init()
+- `open()` errors if `catalog.db` does not exist — commands that read data must call `open()`, never `init()`.
+- `init()` is idempotent — safe to call even if already initialized.
+- Both respect `DMAN_HOME` env var via `Catalog::home_path()`.
+
+### comfy-table usage
+- `Table::new()` → `table.set_header(vec![Cell::new(...)])` → `table.add_row(vec![Cell::new(...)])` → `println!("{table}")`.
+- `Cell::new(value)` accepts anything implementing `Display`, including `i64`, `String`, `&str`, `PathBuf::display()`.
+
+### Files Changed
+- `crates/cli/Cargo.toml` — added dman-core, comfy-table, colored, serde_json, anyhow deps
+- `crates/cli/src/main.rs` — full clap derive CLI (~355 lines)
+- `crates/cli/tests/cli.rs` — 8 integration tests (all pass)
