@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{db::Database, DmanError, Result};
+use crate::{DmanError, Result, db::Database};
 
 pub struct Catalog {
     db: Database,

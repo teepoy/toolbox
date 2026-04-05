@@ -92,9 +92,9 @@ use pyo3::prelude::*;
 #[pymodule]
 fn dman_python(m: &Bound<'_, pyo3::types::PyModule>) -> PyResult<()> {
     use sdk::builder::python_impl::{
-        create_dataset, update_dataset, DmanDatasetBuilder, DmanDatasetUpdater,
+        DmanDatasetBuilder, DmanDatasetUpdater, create_dataset, update_dataset,
     };
-    use sdk::loader::{load_dataset, DmanDataset};
+    use sdk::loader::{DmanDataset, load_dataset};
     m.add_function(wrap_pyfunction!(load_dataset, m)?)?;
     m.add_function(wrap_pyfunction!(create_dataset, m)?)?;
     m.add_function(wrap_pyfunction!(update_dataset, m)?)?;

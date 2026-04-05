@@ -2,15 +2,21 @@
 
 A practical guide to managing ML datasets with the **dman** CLI and Rust/Python SDK.
 
+This guide reflects the current extension model: **dataset formats are registry-backed format IDs**, not a built-in `custom` enum branch in core. Built-ins such as `yolo`, `coco`, and `huggingface` are just pre-registered format providers. User-defined providers can register their own format IDs such as `parquet-multi-image`.
+
 ## Installation
 
 ```bash
 # Build from source
 cargo build --release
 
-# The CLI binary is at target/release/dman-cli
+# The Rust CLI binary is at target/release/dman-cli
 # Optionally add it to your PATH:
 export PATH="$PWD/target/release:$PATH"
+
+# Python package users also get a `dman` console entrypoint
+pip install .
+dman --help
 ```
 
 ## 1. Initialize the Catalog
@@ -72,7 +78,7 @@ names:
 
 ```bash
 dman-cli add mnist-yolo ~/datasets/mnist-yolo --format yolo
-# ✓ Registered dataset 'mnist-yolo' (id=1, format=Yolo)
+# ✓ Registered dataset 'mnist-yolo' (id=1, format=yolo)
 ```
 
 ### Verify
@@ -93,19 +99,30 @@ dman-cli inspect mnist-yolo
 #   Path:    /home/user/datasets/mnist-yolo
 #   Created: 2026-04-05 12:00:00
 # ──────────────────────────────────────────────────
-#   Images:      0
+#   Samples:     0 / Assets: 0
 #   Annotations: 0
 #   Disk size:   12345 B
 # ──────────────────────────────────────────────────
 ```
 
-> **Note**: `dman-cli add` _registers_ the dataset path in the catalog but does not parse/import individual images and annotations. To import images and annotations into the catalog database, use the Rust library API (see Section 3 below).
+> **Note**: `dman-cli add` _registers_ the dataset path and its format ID in the catalog. To parse/import the underlying files, use `dman-cli import` or call an importer through the `FormatRegistry`.
 
 ---
 
-## 3. Import a YOLO Dataset (Rust Library)
+## 3. Import a YOLO Dataset
 
-The `FormatImporter` trait provides full dataset parsing — images, labels, categories — directly into the catalog database.
+### Via CLI
+
+```bash
+dman-cli import ~/datasets/mnist-yolo --name mnist-imported
+# ✓ Imported '/home/user/datasets/mnist-yolo' as dataset 'mnist-imported' (id=2, format=yolo)
+```
+
+When `--format` is omitted, dman asks the registered providers to detect the format from the input path.
+
+### Via Rust Library
+
+The `FormatImporter` trait provides full dataset parsing — samples, assets, labels, categories — directly into the catalog database.
 
 ```rust
 use dman_core::catalog::Catalog;
@@ -124,7 +141,7 @@ fn main() -> anyhow::Result<()> {
     // Detect format automatically
     assert!(importer.detect(path)); // true if data.yaml exists
 
-    // Import: parses data.yaml, reads images + labels, inserts into DB
+    // Import: parses data.yaml, reads image files as assets, inserts into DB
     let dataset = importer.import(catalog.db(), &storage, path, "mnist-imported")?;
 
     println!("Imported '{}' — id={}", dataset.name, dataset.id);
@@ -132,11 +149,20 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
-After import, `dman-cli inspect mnist-imported` will show image/annotation counts.
+After import, `dman-cli inspect mnist-imported` will show sample/asset and annotation counts.
 
 ---
 
-## 4. Export a Dataset as YOLO Format (Rust Library)
+## 4. Export a Dataset as YOLO Format
+
+### Via CLI
+
+```bash
+dman-cli export mnist-imported /tmp/mnist-yolo-export --format yolo
+# ✓ Exported dataset 'mnist-imported' to /tmp/mnist-yolo-export as yolo
+```
+
+### Via Rust Library
 
 Export any dman dataset to a YOLO-compatible directory layout:
 
@@ -161,7 +187,7 @@ fn main() -> anyhow::Result<()> {
     // Output structure:
     // /tmp/mnist-yolo-export/
     // ├── data.yaml          # nc, names, path references
-    // ├── images/train/      # copied image files
+    // ├── images/train/      # image asset files
     // └── labels/train/      # YOLO label .txt files
 
     println!("Exported to {}", output.display());
@@ -198,11 +224,11 @@ dman-cli label-studio export \
     your-api-key \                # API token
     1 \                           # Target project ID
     my-labeled-dataset \          # Dataset name in dman
-    --port 9090                   # Local port for image serving (default: 8080)
+    --port 9090                   # Local port for asset serving (default: 8080)
 # ✓ Exported dataset 'my-labeled-dataset' to Label Studio project 1 using port 9090
 ```
 
-> **How it works**: dman generates image URLs pointing to `http://localhost:<port>/images/<dataset_id>/<filename>`. You need to run a dman image server (or serve images yourself) so Label Studio can access them.
+> **How it works**: dman generates asset URLs pointing to `http://localhost:<port>/images/<dataset_id>/<filename>`. You need to run a dman asset server (or serve files yourself) so Label Studio can access them.
 
 ---
 
@@ -215,8 +241,8 @@ Register an empty dataset and populate it programmatically via the Python SDK.
 ```bash
 mkdir -p ~/datasets/my-empty-dataset
 
-dman-cli add my-project ~/datasets/my-empty-dataset --format custom
-# ✓ Registered dataset 'my-project' (id=3, format=Custom("custom"))
+dman-cli add my-project ~/datasets/my-empty-dataset --format builder
+# ✓ Registered dataset 'my-project' (id=3, format=builder)
 ```
 
 ### Populate with the Python SDK
@@ -230,25 +256,31 @@ cargo build --release --features python
 ```python
 import dman_python
 
-# Create a new dataset with the builder pattern
+# Create a new dataset using the sample/asset builder pattern
 builder = dman_python.create_dataset("my-annotated-dataset")
 
-# Add images (returns an index for referencing in annotations)
-idx0 = builder.add_image("/path/to/image_001.jpg")
-idx1 = builder.add_image("/path/to/image_002.jpg", metadata={"source": "camera_a"})
+# Add samples and assets
+builder.add_sample("scene_001", metadata={"split": "train"})
+builder.add_asset("scene_001", "/path/to/image_001.jpg", asset_type="image")
+
+builder.add_sample("scene_002", metadata={"split": "train"})
+builder.add_asset("scene_002", "/path/to/image_002.jpg", asset_type="image", metadata={"source": "camera_a"})
 
 # Add annotations (bbox = [x, y, width, height])
-builder.add_annotation(idx0, "cat", [100.0, 200.0, 50.0, 80.0])
-builder.add_annotation(idx0, "dog", [300.0, 150.0, 60.0, 90.0])
-builder.add_annotation(idx1, "cat", [50.0, 50.0, 120.0, 100.0])
+builder.add_annotation("scene_001", "cat", bbox=[100.0, 200.0, 50.0, 80.0], asset_name="image_001.jpg")
+builder.add_annotation("scene_001", "dog", bbox=[300.0, 150.0, 60.0, 90.0], asset_name="image_001.jpg")
+builder.add_annotation("scene_002", "cat", bbox=[50.0, 50.0, 120.0, 100.0], asset_name="image_002.jpg")
+
+# Convenience: add_image() creates a 1:1 sample+asset automatically
+builder.add_image("/path/to/image_003.jpg", label="cat", bbox=[10.0, 10.0, 50.0, 50.0])
 
 # Define categories with supercategories
 builder.set_category("cat", supercategory="animal")
 builder.set_category("dog", supercategory="animal")
 
-# Build: registers in catalog, inserts all images + annotations atomically
+# Build: registers in catalog, inserts all samples + assets + annotations atomically
 ds = builder.build()
-print(f"Created '{ds.name}' with {len(ds)} images")
+print(f"Created '{ds.name}'")
 ```
 
 ### Load and iterate
@@ -257,15 +289,19 @@ print(f"Created '{ds.name}' with {len(ds)} images")
 import dman_python
 
 ds = dman_python.load_dataset("my-annotated-dataset")
-print(f"Dataset: {ds.name}, Images: {len(ds)}")
+print(f"Dataset: {ds.name}")
 
-# Access by index
-sample = ds[0]
-print(sample["file_name"], sample["image_path"])
-print(f"  Annotations: {len(sample['annotations'])}")
+# Iterate samples
+for sample in ds.samples():
+    print(sample["name"], sample["assets"])
 
-# Get all image paths
-paths = ds.images()
+# Access a single sample by name
+sample = ds.get_sample("scene_001")
+print(sample["name"], sample["assets"])
+
+# Get annotations for a sample
+annotations = ds.annotations("scene_001")
+print(f"  Annotations: {len(annotations)}")
 
 # Convert to PyTorch Dataset
 torch_ds = ds.to_torch_dataset()  # requires: pip install torch
@@ -281,14 +317,12 @@ import dman_python
 
 updater = dman_python.update_dataset("my-annotated-dataset")
 
-# Add new images
-updater.add_image("/path/to/new_image.jpg")
+# Add a new sample and asset
+updater.add_sample("scene_003")
+updater.add_asset("scene_003", "/path/to/new_image.jpg", asset_type="image")
 
-# Add annotation to an existing image (by DB image id)
-updater.add_annotation(image_id=1, category="bird", bbox=[10.0, 20.0, 30.0, 40.0])
-
-# Remove an image and its annotations
-updater.remove_image(image_id=2)
+# Add annotation to an existing sample
+updater.add_annotation("scene_001", "bird", bbox=[10.0, 20.0, 30.0, 40.0])
 
 # Apply all changes atomically
 updater.apply()
@@ -296,31 +330,116 @@ updater.apply()
 
 ---
 
-## 7. Import from a Custom Format
+## 7. Register a User-Defined Dataset Format
 
-dman supports pluggable format importers. You can register a custom Python plugin or implement the `FormatImporter` trait in Rust.
+dman now treats format names as **registry IDs**. A provider can come from Rust or Python. The provider owns its own detection, serialization, and conversion logic.
 
-### Python plugin approach
+### Python plugin layout
 
-Create a Python file with a `dman_plugin` marker:
+Place Python format providers under `~/.dman/plugins/` (or `$DMAN_HOME/plugins/`). Each provider declares a stable format ID using `dman_plugin["name"]`.
 
 ```python
-# my_custom_format.py
+# ~/.dman/plugins/parquet_multi_image.py
+from __future__ import annotations
+
+from pathlib import Path
+import io
+import json
+
+import pyarrow.parquet as pq
+from PIL import Image
+
+
 dman_plugin = {
-    "name": "my_format",
+    "name": "parquet-multi-image",
     "type": "format",
     "version": "1.0.0",
 }
 
-def import_dataset(path, dataset_name):
-    """Your custom import logic here."""
-    # Parse your format, yield (image_path, annotations) pairs
-    pass
+
+def detect(path: str) -> bool:
+    root = Path(path)
+    return root.is_dir() and any(p.suffix == ".parquet" for p in root.glob("*.parquet"))
+
+
+def _decode_image(raw: bytes, output_path: Path) -> None:
+    image = Image.open(io.BytesIO(raw))
+    image.save(output_path)
+
+
+def import_dataset(path: str):
+    root = Path(path)
+    assets_dir = root / ".materialized-assets"
+    assets_dir.mkdir(exist_ok=True)
+
+    samples = []
+    annotations = []
+
+    for parquet_path in root.glob("*.parquet"):
+        table = pq.read_table(parquet_path)
+        columns = table.column_names
+        image_columns = [name for name in columns if name.startswith("image_")]
+
+        for row_idx in range(table.num_rows):
+            row = table.slice(row_idx, 1).to_pylist()[0]
+            label = row.get("label", "unknown")
+            bbox = row.get("bbox", [0.0, 0.0, 1.0, 1.0])
+
+            # Each row becomes one sample; each image column becomes one asset
+            sample_name = f"{parquet_path.stem}_{row_idx}"
+            assets = []
+
+            for image_col in image_columns:
+                raw = row.get(image_col)
+                if raw is None:
+                    continue
+
+                file_name = f"{sample_name}_{image_col}.png"
+                output_path = assets_dir / file_name
+                _decode_image(raw, output_path)
+
+                assets.append({
+                    "file_name": str(Path(".materialized-assets") / file_name),
+                    "asset_type": "image",
+                })
+                annotations.append(
+                    {
+                        "sample_name": sample_name,
+                        "asset_file_name": str(Path(".materialized-assets") / file_name),
+                        "category": label,
+                        "bbox": bbox,
+                    }
+                )
+
+            samples.append({"name": sample_name, "assets": assets})
+
+    return {"samples": samples, "annotations": annotations}
+
+
+def export_dataset(data, output_path: str):
+    root = Path(output_path)
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / "manifest.json").open("w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
 ```
 
-Place it in a plugin directory and dman will discover it automatically.
+### Import it through the shipped CLI
 
-### Rust trait approach
+```bash
+dman-cli init
+dman-cli import ~/datasets/parquet-corpus --name parquet-demo
+# auto-detects parquet-multi-image from ~/.dman/plugins/
+
+# or be explicit
+dman-cli import ~/datasets/parquet-corpus --name parquet-demo --format parquet-multi-image
+
+# export through the same provider
+dman-cli export parquet-demo /tmp/parquet-export --format parquet-multi-image
+```
+
+The plugin decides how to deserialize and serialize. If your format needs MCP, gRPC, or another transport, keep the stable format ID the same and implement that transport inside the provider.
+
+### Rust provider approach
 
 Implement `FormatImporter` for full control:
 
@@ -336,12 +455,11 @@ pub struct MyCustomImporter;
 
 impl FormatImporter for MyCustomImporter {
     fn name(&self) -> &str {
-        "my-custom"
+        "parquet-multi-image"
     }
 
     fn detect(&self, path: &Path) -> bool {
-        // Return true if this path looks like your format
-        path.join("metadata.json").exists()
+        path.is_dir() && path.join("train-00000-of-00001.parquet").exists()
     }
 
     fn import(
@@ -351,10 +469,8 @@ impl FormatImporter for MyCustomImporter {
         path: &Path,
         dataset_name: &str,
     ) -> Result<Dataset> {
-        // 1. Parse your format files
-        // 2. Register the dataset
-        // 3. Insert images, categories, and annotations into the DB
-        // 4. Return the Dataset record
+        // Parse parquet rows, materialize asset bytes to files, then insert
+        // sample/asset/category/annotation records into dman.
         todo!("implement your format parsing")
     }
 }
@@ -364,6 +480,7 @@ Register it with the `FormatRegistry`:
 
 ```rust
 use dman_core::formats::FormatRegistry;
+use std::path::Path;
 
 let mut registry = FormatRegistry::default_registry();
 registry.register_importer(Box::new(MyCustomImporter));
@@ -382,10 +499,12 @@ if let Some(format_name) = registry.detect_format(Path::new("/path/to/data")) {
 | Command | Description |
 |---------|-------------|
 | `dman-cli init` | Initialize catalog at `~/.dman` |
-| `dman-cli add <name> <path> --format <yolo\|coco\|hf\|custom>` | Register a dataset |
+| `dman-cli add <name> <path> --format <format-id>` | Register a dataset using a canonical format ID |
 | `dman-cli list [--format table\|json]` | List all datasets |
-| `dman-cli inspect <name>` | Show dataset details |
+| `dman-cli inspect <name>` | Show dataset details (samples, assets, annotations) |
 | `dman-cli remove <name> [-y]` | Remove a dataset (metadata only) |
+| `dman-cli import <path> --name <dataset> [--format <format-id>]` | Import using the runtime format registry |
+| `dman-cli export <dataset> <output> --format <format-id>` | Export using the runtime format registry |
 | `dman-cli label-studio import <url> <api_key> <project_id> <name>` | Import from Label Studio |
 | `dman-cli label-studio export <url> <api_key> <project_id> <dataset> [--port N]` | Export to Label Studio |
 | `dman-cli embed <dataset> --model <path> [--batch-size N]` | Compute embeddings (requires `--features python`) |
@@ -401,10 +520,10 @@ if let Some(format_name) = registry.detect_format(Path::new("/path/to/data")) {
 
 ## Supported Formats
 
-| Format | Import | Export | CLI `--format` |
-|--------|--------|--------|----------------|
-| YOLO | ✅ Full (images + labels + categories) | ✅ Full (data.yaml + images/ + labels/) | `yolo` |
-| COCO | ✅ Full (JSON annotations) | ✅ Full (instances JSON) | `coco` |
-| HuggingFace | ✅ (dataset loading) | ✅ (dataset export) | `hf` |
-| Label Studio | ✅ Via `label-studio import` | ✅ Via `label-studio export` | — |
-| Custom | ✅ Plugin system | ✅ Plugin system | `custom` |
+| Format ID | Import | Export | Source |
+|-----------|--------|--------|--------|
+| `yolo` | ✅ Full (image assets + labels + categories) | ✅ Full (data.yaml + images/ + labels/) | Built in |
+| `coco` | ✅ Full (JSON annotations) | ✅ Full (instances JSON) | Built in |
+| `huggingface` | ✅ Parquet-backed dataset loading | ✅ Dataset export | Built in |
+| `label-studio` | ✅ Via `label-studio import` | ✅ Via `label-studio export` | Built in integration |
+| `parquet-multi-image` | ✅ Plugin-defined | ✅ Plugin-defined | User plugin |

@@ -1,7 +1,7 @@
 use crate::{
     error::{DmanError, Result},
     schema::{ColumnDef, SchemaDefinition},
-    types::{Image, SchemaOp},
+    types::{Sample, SchemaOp},
 };
 
 pub struct SchemaTransformer;
@@ -15,19 +15,16 @@ impl SchemaTransformer {
         Ok(current)
     }
 
-    pub fn apply_to_images(images: &[Image], ops: &[SchemaOp]) -> Result<Vec<Image>> {
-        let mut result: Vec<Image> = Vec::with_capacity(images.len());
-        for img in images {
-            let new_metadata = transform_metadata(img.metadata.clone(), ops);
-            result.push(Image {
-                id: img.id,
-                dataset_id: img.dataset_id,
-                file_name: img.file_name.clone(),
-                file_path: img.file_path.clone(),
-                width: img.width,
-                height: img.height,
-                hash: img.hash.clone(),
+    pub fn apply_to_samples(samples: &[Sample], ops: &[SchemaOp]) -> Result<Vec<Sample>> {
+        let mut result: Vec<Sample> = Vec::with_capacity(samples.len());
+        for s in samples {
+            let new_metadata = transform_metadata(s.metadata.clone(), ops);
+            result.push(Sample {
+                id: s.id,
+                dataset_id: s.dataset_id,
+                name: s.name.clone(),
                 metadata: new_metadata,
+                created_at: s.created_at.clone(),
             });
         }
         Ok(result)
@@ -239,17 +236,13 @@ required = false
         .expect("parse schema")
     }
 
-    fn make_image_with_metadata(id: i64, meta: serde_json::Value) -> Image {
-        use std::path::PathBuf;
-        Image {
+    fn make_sample_with_metadata(id: i64, meta: serde_json::Value) -> Sample {
+        Sample {
             id,
             dataset_id: 1,
-            file_name: format!("img{}.jpg", id),
-            file_path: PathBuf::from(format!("/tmp/img{}.jpg", id)),
-            width: None,
-            height: None,
-            hash: None,
+            name: format!("sample-{}", id),
             metadata: Some(meta),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
         }
     }
 
@@ -404,8 +397,8 @@ required = false
     }
 
     #[test]
-    fn test_rename_column_images() {
-        let images = vec![make_image_with_metadata(
+    fn test_rename_column_samples() {
+        let samples = vec![make_sample_with_metadata(
             1,
             serde_json::json!({"label": "cat", "confidence": 0.9}),
         )];
@@ -413,7 +406,7 @@ required = false
             from: "label".to_string(),
             to: "class".to_string(),
         }];
-        let result = SchemaTransformer::apply_to_images(&images, &ops).expect("apply to images");
+        let result = SchemaTransformer::apply_to_samples(&samples, &ops).expect("apply to samples");
 
         let meta = result[0].metadata.as_ref().expect("metadata");
         assert!(meta.get("label").is_none());
@@ -421,8 +414,8 @@ required = false
     }
 
     #[test]
-    fn test_add_column_images_with_non_null_default() {
-        let images = vec![make_image_with_metadata(
+    fn test_add_column_samples_with_non_null_default() {
+        let samples = vec![make_sample_with_metadata(
             1,
             serde_json::json!({"label": "dog"}),
         )];
@@ -431,15 +424,15 @@ required = false
             dtype: "String".to_string(),
             default: serde_json::json!("train"),
         }];
-        let result = SchemaTransformer::apply_to_images(&images, &ops).expect("apply");
+        let result = SchemaTransformer::apply_to_samples(&samples, &ops).expect("apply");
 
         let meta = result[0].metadata.as_ref().expect("metadata");
         assert_eq!(meta["split"], serde_json::json!("train"));
     }
 
     #[test]
-    fn test_add_column_images_with_null_default_does_not_insert() {
-        let images = vec![make_image_with_metadata(
+    fn test_add_column_samples_with_null_default_does_not_insert() {
+        let samples = vec![make_sample_with_metadata(
             1,
             serde_json::json!({"label": "dog"}),
         )];
@@ -448,20 +441,20 @@ required = false
             dtype: "String".to_string(),
             default: serde_json::json!(null),
         }];
-        let result = SchemaTransformer::apply_to_images(&images, &ops).expect("apply");
+        let result = SchemaTransformer::apply_to_samples(&samples, &ops).expect("apply");
 
         let meta = result[0].metadata.as_ref().expect("metadata");
         assert!(meta.get("optional_col").is_none());
     }
 
     #[test]
-    fn test_remove_column_images() {
-        let images = vec![make_image_with_metadata(
+    fn test_remove_column_samples() {
+        let samples = vec![make_sample_with_metadata(
             1,
             serde_json::json!({"label": "cat", "confidence": 0.9}),
         )];
         let ops = vec![SchemaOp::RemoveColumn("confidence".to_string())];
-        let result = SchemaTransformer::apply_to_images(&images, &ops).expect("apply");
+        let result = SchemaTransformer::apply_to_samples(&samples, &ops).expect("apply");
 
         let meta = result[0].metadata.as_ref().expect("metadata");
         assert!(meta.get("confidence").is_none());
@@ -469,37 +462,33 @@ required = false
     }
 
     #[test]
-    fn test_cast_column_images_no_change() {
+    fn test_cast_column_samples_no_change() {
         let original_meta = serde_json::json!({"count": 5});
-        let images = vec![make_image_with_metadata(1, original_meta.clone())];
+        let samples = vec![make_sample_with_metadata(1, original_meta.clone())];
         let ops = vec![SchemaOp::CastColumn {
             name: "count".to_string(),
             dtype: "Float".to_string(),
         }];
-        let result = SchemaTransformer::apply_to_images(&images, &ops).expect("apply");
+        let result = SchemaTransformer::apply_to_samples(&samples, &ops).expect("apply");
 
         assert_eq!(result[0].metadata, Some(original_meta));
     }
 
     #[test]
-    fn test_images_without_metadata_add_column_with_default() {
-        use std::path::PathBuf;
-        let images = vec![Image {
+    fn test_samples_without_metadata_add_column_with_default() {
+        let samples = vec![Sample {
             id: 1,
             dataset_id: 1,
-            file_name: "img1.jpg".to_string(),
-            file_path: PathBuf::from("/tmp/img1.jpg"),
-            width: None,
-            height: None,
-            hash: None,
+            name: "sample-1".to_string(),
             metadata: None,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
         }];
         let ops = vec![SchemaOp::AddColumn {
             name: "split".to_string(),
             dtype: "String".to_string(),
             default: serde_json::json!("val"),
         }];
-        let result = SchemaTransformer::apply_to_images(&images, &ops).expect("apply");
+        let result = SchemaTransformer::apply_to_samples(&samples, &ops).expect("apply");
 
         let meta = result[0]
             .metadata

@@ -8,45 +8,39 @@ use crate::{
     db::Database,
     error::{DmanError, Result},
     storage::StorageManager,
-    types::{Dataset, FilterOp, Image},
+    types::{Dataset, FilterOp, Sample},
 };
 
 // ─── Row helper ────────────────────────────────────────────────────────────
 
-fn row_to_image(row: &rusqlite::Row<'_>) -> rusqlite::Result<Image> {
+fn row_to_sample(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sample> {
     let id: i64 = row.get(0)?;
     let dataset_id: i64 = row.get(1)?;
-    let file_name: String = row.get(2)?;
-    let file_path: String = row.get(3)?;
-    let width: Option<u32> = row.get(4)?;
-    let height: Option<u32> = row.get(5)?;
-    let hash: Option<String> = row.get(6)?;
-    let metadata_str: Option<String> = row.get(7)?;
+    let name: String = row.get(2)?;
+    let metadata_str: Option<String> = row.get(3)?;
+    let created_at: String = row.get(4)?;
     let metadata = metadata_str
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
-    Ok(Image {
+    Ok(Sample {
         id,
         dataset_id,
-        file_name,
-        file_path: PathBuf::from(file_path),
-        width,
-        height,
-        hash,
+        name,
         metadata,
+        created_at,
     })
 }
 
-/// List all images for a dataset.
-fn list_images(db: &Database, dataset_id: i64) -> Result<Vec<Image>> {
+/// List all samples for a dataset.
+fn list_samples(db: &Database, dataset_id: i64) -> Result<Vec<Sample>> {
     let mut stmt = db.conn.prepare(
-        "SELECT id, dataset_id, file_name, file_path, width, height, hash, metadata \
-         FROM images WHERE dataset_id = ?1 ORDER BY id",
+        "SELECT id, dataset_id, name, metadata, created_at \
+         FROM samples WHERE dataset_id = ?1 ORDER BY id",
     )?;
-    let images = stmt
-        .query_map(params![dataset_id], row_to_image)?
+    let samples = stmt
+        .query_map(params![dataset_id], row_to_sample)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(images)
+    Ok(samples)
 }
 
 /// Simple deterministic hash for sampling (same algorithm as virtual_dataset).
@@ -61,48 +55,48 @@ fn hash_id(id: i64, seed: u64) -> u64 {
 
 // ─── Filter helpers ─────────────────────────────────────────────────────────
 
-fn filter_has_annotations(db: &Database, images: &[Image]) -> Result<Vec<Image>> {
-    if images.is_empty() {
+fn filter_has_annotations(db: &Database, samples: &[Sample]) -> Result<Vec<Sample>> {
+    if samples.is_empty() {
         return Ok(vec![]);
     }
-    let image_ids: Vec<i64> = images.iter().map(|img| img.id).collect();
-    let placeholders: Vec<String> = (1..=image_ids.len()).map(|i| format!("?{}", i)).collect();
+    let sample_ids: Vec<i64> = samples.iter().map(|s| s.id).collect();
+    let placeholders: Vec<String> = (1..=sample_ids.len()).map(|i| format!("?{}", i)).collect();
     let sql = format!(
-        "SELECT DISTINCT image_id FROM annotations WHERE image_id IN ({})",
+        "SELECT DISTINCT sample_id FROM annotations WHERE sample_id IN ({})",
         placeholders.join(", ")
     );
     let mut stmt = db.conn.prepare(&sql)?;
     let annotated_ids: HashSet<i64> = stmt
-        .query_map(rusqlite::params_from_iter(image_ids.iter()), |row| {
+        .query_map(rusqlite::params_from_iter(sample_ids.iter()), |row| {
             row.get::<_, i64>(0)
         })?
         .collect::<rusqlite::Result<HashSet<_>>>()?;
 
-    Ok(images
+    Ok(samples
         .iter()
-        .filter(|img| annotated_ids.contains(&img.id))
+        .filter(|s| annotated_ids.contains(&s.id))
         .cloned()
         .collect())
 }
 
-fn filter_by_category(db: &Database, images: &[Image], cat_name: &str) -> Result<Vec<Image>> {
-    if images.is_empty() {
+fn filter_by_category(db: &Database, samples: &[Sample], cat_name: &str) -> Result<Vec<Sample>> {
+    if samples.is_empty() {
         return Ok(vec![]);
     }
-    let image_ids: Vec<i64> = images.iter().map(|img| img.id).collect();
+    let sample_ids: Vec<i64> = samples.iter().map(|s| s.id).collect();
     let sql = format!(
-        "SELECT DISTINCT a.image_id \
+        "SELECT DISTINCT a.sample_id \
          FROM annotations a \
          JOIN categories c ON a.category_id = c.id \
-         WHERE c.name = ?1 AND a.image_id IN ({})",
-        (2..=image_ids.len() + 1)
+         WHERE c.name = ?1 AND a.sample_id IN ({})",
+        (2..=sample_ids.len() + 1)
             .map(|i| format!("?{}", i))
             .collect::<Vec<_>>()
             .join(", ")
     );
 
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(cat_name.to_string())];
-    for id in &image_ids {
+    for id in &sample_ids {
         params_vec.push(Box::new(*id));
     }
 
@@ -114,18 +108,18 @@ fn filter_by_category(db: &Database, images: &[Image], cat_name: &str) -> Result
         )?
         .collect::<rusqlite::Result<HashSet<_>>>()?;
 
-    Ok(images
+    Ok(samples
         .iter()
-        .filter(|img| matching_ids.contains(&img.id))
+        .filter(|s| matching_ids.contains(&s.id))
         .cloned()
         .collect())
 }
 
-fn filter_by_metadata_eq(images: &[Image], key: &str, value: &serde_json::Value) -> Vec<Image> {
-    images
+fn filter_by_metadata_eq(samples: &[Sample], key: &str, value: &serde_json::Value) -> Vec<Sample> {
+    samples
         .iter()
-        .filter(|img| {
-            if let Some(meta) = &img.metadata {
+        .filter(|s| {
+            if let Some(meta) = &s.metadata {
                 meta.get(key) == Some(value)
             } else {
                 false
@@ -136,7 +130,7 @@ fn filter_by_metadata_eq(images: &[Image], key: &str, value: &serde_json::Value)
 }
 
 fn apply_filter_op(
-    img_val: &serde_json::Value,
+    sample_val: &serde_json::Value,
     op: &FilterOp,
     filter_val: &serde_json::Value,
 ) -> bool {
@@ -161,16 +155,16 @@ fn apply_filter_op(
     }
 
     match op {
-        FilterOp::Eq => img_val == filter_val,
-        FilterOp::Ne => img_val != filter_val,
-        FilterOp::Gt => compare_json(img_val, filter_val).is_some_and(|o| o > 0),
-        FilterOp::Lt => compare_json(img_val, filter_val).is_some_and(|o| o < 0),
-        FilterOp::Gte => compare_json(img_val, filter_val).is_some_and(|o| o >= 0),
-        FilterOp::Lte => compare_json(img_val, filter_val).is_some_and(|o| o <= 0),
+        FilterOp::Eq => sample_val == filter_val,
+        FilterOp::Ne => sample_val != filter_val,
+        FilterOp::Gt => compare_json(sample_val, filter_val).is_some_and(|o| o > 0),
+        FilterOp::Lt => compare_json(sample_val, filter_val).is_some_and(|o| o < 0),
+        FilterOp::Gte => compare_json(sample_val, filter_val).is_some_and(|o| o >= 0),
+        FilterOp::Lte => compare_json(sample_val, filter_val).is_some_and(|o| o <= 0),
         FilterOp::Contains => {
-            if let (Some(s), Some(pat)) = (img_val.as_str(), filter_val.as_str()) {
+            if let (Some(s), Some(pat)) = (sample_val.as_str(), filter_val.as_str()) {
                 s.contains(pat)
-            } else if let Some(arr) = img_val.as_array() {
+            } else if let Some(arr) = sample_val.as_array() {
                 arr.contains(filter_val)
             } else {
                 false
@@ -178,7 +172,7 @@ fn apply_filter_op(
         }
         FilterOp::In => {
             if let Some(arr) = filter_val.as_array() {
-                arr.contains(img_val)
+                arr.contains(sample_val)
             } else {
                 false
             }
@@ -186,56 +180,45 @@ fn apply_filter_op(
     }
 }
 
-fn get_image_field_value(img: &Image, column: &str) -> serde_json::Value {
+fn get_sample_field_value(sample: &Sample, column: &str) -> serde_json::Value {
     match column {
-        "id" => serde_json::json!(img.id),
-        "dataset_id" => serde_json::json!(img.dataset_id),
-        "file_name" => serde_json::json!(img.file_name),
-        "file_path" => serde_json::json!(img.file_path.to_string_lossy().as_ref()),
-        "width" => img
-            .width
-            .map_or(serde_json::Value::Null, |w| serde_json::json!(w)),
-        "height" => img
-            .height
-            .map_or(serde_json::Value::Null, |h| serde_json::json!(h)),
-        "hash" => img
-            .hash
-            .as_deref()
-            .map_or(serde_json::Value::Null, |h| serde_json::json!(h)),
+        "id" => serde_json::json!(sample.id),
+        "dataset_id" => serde_json::json!(sample.dataset_id),
+        "name" => serde_json::json!(sample.name),
         _ => serde_json::Value::Null,
     }
 }
 
 /// Apply a filter using the column-based dispatch pattern.
-/// - `column = "annotated"` → images with ≥1 annotation
-/// - `column = "category"` or `"category_name"` → images with annotation of given category
-/// - `column = "metadata.KEY"` → images where metadata[KEY] == value
+/// - `column = "annotated"` → samples with ≥1 annotation
+/// - `column = "category"` or `"category_name"` → samples with annotation of given category
+/// - `column = "metadata.KEY"` → samples where metadata[KEY] == value
 /// - anything else → in-memory field comparison
 fn apply_column_filter(
     db: &Database,
-    images: &[Image],
+    samples: &[Sample],
     column: &str,
     op: &FilterOp,
     value: &serde_json::Value,
-) -> Result<Vec<Image>> {
+) -> Result<Vec<Sample>> {
     match column {
-        "annotated" => filter_has_annotations(db, images),
+        "annotated" => filter_has_annotations(db, samples),
         "category" | "category_name" => {
             let cat_name = value.as_str().ok_or_else(|| {
                 DmanError::StorageError("category filter value must be a string".to_string())
             })?;
-            filter_by_category(db, images, cat_name)
+            filter_by_category(db, samples, cat_name)
         }
         _ if column.starts_with("metadata.") => {
             let key = &column["metadata.".len()..];
-            Ok(filter_by_metadata_eq(images, key, value))
+            Ok(filter_by_metadata_eq(samples, key, value))
         }
         _ => {
-            let result = images
+            let result = samples
                 .iter()
-                .filter(|img| {
-                    let img_val = get_image_field_value(img, column);
-                    apply_filter_op(&img_val, op, value)
+                .filter(|s| {
+                    let sample_val = get_sample_field_value(s, column);
+                    apply_filter_op(&sample_val, op, value)
                 })
                 .cloned()
                 .collect();
@@ -246,36 +229,26 @@ fn apply_column_filter(
 
 // ─── Insert helpers ─────────────────────────────────────────────────────────
 
-/// Insert an image into the new dataset (using the same file_path as source — reference semantics).
-/// Returns the new image_id.
-fn insert_image_ref(db: &Database, dst_dataset_id: i64, img: &Image) -> Result<i64> {
-    let file_path_str = img.file_path.to_string_lossy().to_string();
-    let metadata_str = img
+/// Insert a sample into the new dataset (reference semantics — same name).
+/// Returns the new sample_id.
+fn insert_sample_ref(db: &Database, dst_dataset_id: i64, sample: &Sample) -> Result<i64> {
+    let metadata_str = sample
         .metadata
         .as_ref()
         .map(serde_json::to_string)
         .transpose()?;
 
     db.conn.execute(
-        "INSERT INTO images (dataset_id, file_name, file_path, width, height, hash, metadata) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            dst_dataset_id,
-            img.file_name,
-            file_path_str,
-            img.width,
-            img.height,
-            img.hash,
-            metadata_str,
-        ],
+        "INSERT INTO samples (dataset_id, name, metadata) VALUES (?1, ?2, ?3)",
+        params![dst_dataset_id, sample.name, metadata_str],
     )?;
     Ok(db.conn.last_insert_rowid())
 }
 
-/// Copy all annotations from `src_image_id` to `dst_image_id`.
-fn copy_annotations(db: &Database, src_image_id: i64, dst_image_id: i64) -> Result<()> {
-    // Collect source annotations
+/// Copy all annotations from `src_sample_id` to `dst_sample_id`.
+fn copy_annotations(db: &Database, src_sample_id: i64, dst_sample_id: i64) -> Result<()> {
     struct RawAnn {
+        asset_id: Option<i64>,
         category_id: Option<i64>,
         bbox: Option<String>,
         segmentation: Option<String>,
@@ -284,27 +257,29 @@ fn copy_annotations(db: &Database, src_image_id: i64, dst_image_id: i64) -> Resu
     }
 
     let mut stmt = db.conn.prepare(
-        "SELECT category_id, bbox, segmentation, keypoints, metadata \
-         FROM annotations WHERE image_id = ?1",
+        "SELECT asset_id, category_id, bbox, segmentation, keypoints, metadata \
+         FROM annotations WHERE sample_id = ?1",
     )?;
     let anns: Vec<RawAnn> = stmt
-        .query_map(params![src_image_id], |row| {
+        .query_map(params![src_sample_id], |row| {
             Ok(RawAnn {
-                category_id: row.get(0)?,
-                bbox: row.get(1)?,
-                segmentation: row.get(2)?,
-                keypoints: row.get(3)?,
-                metadata: row.get(4)?,
+                asset_id: row.get(0)?,
+                category_id: row.get(1)?,
+                bbox: row.get(2)?,
+                segmentation: row.get(3)?,
+                keypoints: row.get(4)?,
+                metadata: row.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
     for ann in &anns {
         db.conn.execute(
-            "INSERT INTO annotations (image_id, category_id, bbox, segmentation, keypoints, metadata) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO annotations (sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                dst_image_id,
+                dst_sample_id,
+                ann.asset_id,
                 ann.category_id,
                 ann.bbox,
                 ann.segmentation,
@@ -318,7 +293,6 @@ fn copy_annotations(db: &Database, src_image_id: i64, dst_image_id: i64) -> Resu
 
 /// Create a new dataset record (same format as source) and return it.
 fn create_output_dataset(db: &Database, source: &Dataset, output_name: &str) -> Result<Dataset> {
-    // Check for duplicate name
     let exists: bool = db.conn.query_row(
         "SELECT COUNT(*) FROM datasets WHERE name = ?1",
         params![output_name],
@@ -328,12 +302,7 @@ fn create_output_dataset(db: &Database, source: &Dataset, output_name: &str) -> 
         return Err(DmanError::DatasetAlreadyExists(output_name.to_string()));
     }
 
-    let format_str = match &source.format {
-        crate::types::DatasetFormat::Yolo => "Yolo",
-        crate::types::DatasetFormat::Coco => "Coco",
-        crate::types::DatasetFormat::HuggingFace => "HuggingFace",
-        crate::types::DatasetFormat::Custom(s) => s.as_str(),
-    };
+    let format_str = source.format.to_string();
     let path_str = source.path.to_string_lossy().to_string();
 
     db.conn.execute(
@@ -350,13 +319,13 @@ fn create_output_dataset(db: &Database, source: &Dataset, output_name: &str) -> 
 pub struct DatasetTransforms;
 
 impl DatasetTransforms {
-    /// Filter images from `name` into a new physical dataset `output_name`.
+    /// Filter samples from `name` into a new physical dataset `output_name`.
     ///
     /// Filtering is column-based (matching `VirtualDatasetDef::Filter` semantics):
-    /// - `column = "annotated"` with any op → images that have ≥1 annotation
-    /// - `column = "category"` / `"category_name"` → images annotated with that category name
-    /// - `column = "metadata.KEY"` → images where `metadata[KEY] == value`
-    /// - anything else → generic image field comparison
+    /// - `column = "annotated"` with any op → samples that have ≥1 annotation
+    /// - `column = "category"` / `"category_name"` → samples annotated with that category name
+    /// - `column = "metadata.KEY"` → samples where `metadata[KEY] == value`
+    /// - anything else → generic sample field comparison
     pub fn filter_dataset(
         db: &Database,
         name: &str,
@@ -366,16 +335,16 @@ impl DatasetTransforms {
         output_name: &str,
     ) -> Result<Dataset> {
         let source = DatasetService::get(db, name)?;
-        let images = list_images(db, source.id)?;
-        let filtered = apply_column_filter(db, &images, column, op, value)?;
+        let samples = list_samples(db, source.id)?;
+        let filtered = apply_column_filter(db, &samples, column, op, value)?;
 
         let out_ds = create_output_dataset(db, &source, output_name)?;
 
         db.conn.execute("BEGIN IMMEDIATE", [])?;
         let result = (|| -> Result<()> {
-            for img in &filtered {
-                let new_img_id = insert_image_ref(db, out_ds.id, img)?;
-                copy_annotations(db, img.id, new_img_id)?;
+            for sample in &filtered {
+                let new_sample_id = insert_sample_ref(db, out_ds.id, sample)?;
+                copy_annotations(db, sample.id, new_sample_id)?;
             }
             Ok(())
         })();
@@ -393,9 +362,9 @@ impl DatasetTransforms {
         Ok(out_ds)
     }
 
-    /// Sample a fraction of images from `name` into a new physical dataset `output_name`.
+    /// Sample a fraction of samples from `name` into a new physical dataset `output_name`.
     ///
-    /// `ratio` must be in (0.0, 1.0]. Uses a deterministic hash of `image.id XOR seed`
+    /// `ratio` must be in (0.0, 1.0]. Uses a deterministic hash of `sample.id XOR seed`
     /// to produce a reproducible ordering.
     pub fn sample_dataset(
         db: &Database,
@@ -411,20 +380,20 @@ impl DatasetTransforms {
         }
 
         let source = DatasetService::get(db, name)?;
-        let mut images = list_images(db, source.id)?;
+        let mut samples = list_samples(db, source.id)?;
 
         // Sort by deterministic hash
-        images.sort_by_key(|img| hash_id(img.id, seed));
-        let count = (images.len() as f64 * ratio).ceil() as usize;
-        let sampled: Vec<Image> = images.into_iter().take(count).collect();
+        samples.sort_by_key(|s| hash_id(s.id, seed));
+        let count = (samples.len() as f64 * ratio).ceil() as usize;
+        let sampled: Vec<Sample> = samples.into_iter().take(count).collect();
 
         let out_ds = create_output_dataset(db, &source, output_name)?;
 
         db.conn.execute("BEGIN IMMEDIATE", [])?;
         let result = (|| -> Result<()> {
-            for img in &sampled {
-                let new_img_id = insert_image_ref(db, out_ds.id, img)?;
-                copy_annotations(db, img.id, new_img_id)?;
+            for sample in &sampled {
+                let new_sample_id = insert_sample_ref(db, out_ds.id, sample)?;
+                copy_annotations(db, sample.id, new_sample_id)?;
             }
             Ok(())
         })();
@@ -457,12 +426,12 @@ impl DatasetTransforms {
         Ok(())
     }
 
-    /// Resize all images in dataset `name` to `width x height` pixels.
+    /// Resize all assets (images) in dataset `name` to `width x height` pixels.
     ///
     /// Tries ImageMagick `convert` first, then falls back to Python PIL.
     /// Returns `Err(DmanError::StorageError(...))` if neither tool is available.
     ///
-    /// This is a best-effort operation — individual image failures are logged
+    /// This is a best-effort operation — individual asset failures are logged
     /// and skipped rather than aborting the entire run.
     pub fn resize_images(
         db: &Database,
@@ -472,17 +441,29 @@ impl DatasetTransforms {
         height: u32,
     ) -> Result<()> {
         let ds = DatasetService::get(db, name)?;
-        let images = list_images(db, ds.id)?;
+
+        // Collect asset file paths for all samples in this dataset
+        let mut stmt = db.conn.prepare(
+            "SELECT a.file_path FROM assets a \
+             JOIN samples s ON a.sample_id = s.id \
+             WHERE s.dataset_id = ?1 AND a.asset_type = 'image' \
+             ORDER BY a.id",
+        )?;
+        let paths: Vec<PathBuf> = stmt
+            .query_map(params![ds.id], |row| {
+                let p: String = row.get(0)?;
+                Ok(PathBuf::from(p))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
 
         let geometry = format!("{}x{}!", width, height);
 
-        for img in &images {
-            let path_str = img.file_path.to_string_lossy().to_string();
+        for path in &paths {
+            let path_str = path.to_string_lossy().to_string();
             let ok = try_imagemagick(&path_str, &geometry).unwrap_or(false)
                 || try_python_pil(&path_str, width, height).unwrap_or(false);
 
             if !ok {
-                // Neither tool available — fail fast with a clear error.
                 return Err(DmanError::StorageError(
                     "resize requires ImageMagick 'convert' or Python PIL".to_string(),
                 ));
@@ -532,17 +513,16 @@ mod tests {
 
     fn setup_dataset(db: &Database, name: &str) -> crate::types::Dataset {
         let dir = tempfile::tempdir().expect("temp dir");
-        DatasetService::register(db, name, dir.path(), DatasetFormat::Yolo).expect("register")
+        DatasetService::register(db, name, dir.path(), DatasetFormat::yolo()).expect("register")
     }
 
-    fn insert_image(db: &Database, dataset_id: i64, file_name: &str) -> i64 {
-        let file_path = format!("/tmp/{}", file_name);
+    fn insert_sample(db: &Database, dataset_id: i64, name: &str) -> i64 {
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                params![dataset_id, file_name, file_path],
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                params![dataset_id, name],
             )
-            .expect("insert image");
+            .expect("insert sample");
         db.conn.last_insert_rowid()
     }
 
@@ -556,23 +536,23 @@ mod tests {
         db.conn.last_insert_rowid()
     }
 
-    fn insert_annotation(db: &Database, image_id: i64, category_id: Option<i64>) {
+    fn insert_annotation(db: &Database, sample_id: i64, category_id: Option<i64>) {
         db.conn
             .execute(
-                "INSERT INTO annotations (image_id, category_id) VALUES (?1, ?2)",
-                params![image_id, category_id],
+                "INSERT INTO annotations (sample_id, category_id) VALUES (?1, ?2)",
+                params![sample_id, category_id],
             )
             .expect("insert annotation");
     }
 
-    fn count_images(db: &Database, dataset_id: i64) -> i64 {
+    fn count_samples(db: &Database, dataset_id: i64) -> i64 {
         db.conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 params![dataset_id],
                 |r| r.get(0),
             )
-            .expect("count images")
+            .expect("count samples")
     }
 
     // ─── filter_dataset: HasAnnotations ─────────────────────────────────────
@@ -582,10 +562,10 @@ mod tests {
         let db = setup_db();
         let ds = setup_dataset(&db, "src");
 
-        let img_with = insert_image(&db, ds.id, "annotated.jpg");
-        let _img_without = insert_image(&db, ds.id, "unannotated.jpg");
+        let sample_with = insert_sample(&db, ds.id, "annotated");
+        let _sample_without = insert_sample(&db, ds.id, "unannotated");
 
-        insert_annotation(&db, img_with, None);
+        insert_annotation(&db, sample_with, None);
 
         let out = DatasetTransforms::filter_dataset(
             &db,
@@ -597,7 +577,7 @@ mod tests {
         )
         .expect("filter");
 
-        assert_eq!(count_images(&db, out.id), 1);
+        assert_eq!(count_samples(&db, out.id), 1);
     }
 
     // ─── filter_dataset: CategoryIs ─────────────────────────────────────────
@@ -610,12 +590,12 @@ mod tests {
         let cat_dog = insert_category(&db, ds.id, "dog");
         let cat_cat = insert_category(&db, ds.id, "cat");
 
-        let img_dog = insert_image(&db, ds.id, "dog.jpg");
-        let img_cat = insert_image(&db, ds.id, "cat.jpg");
-        let _img_none = insert_image(&db, ds.id, "none.jpg");
+        let sample_dog = insert_sample(&db, ds.id, "dog-sample");
+        let sample_cat = insert_sample(&db, ds.id, "cat-sample");
+        let _sample_none = insert_sample(&db, ds.id, "none-sample");
 
-        insert_annotation(&db, img_dog, Some(cat_dog));
-        insert_annotation(&db, img_cat, Some(cat_cat));
+        insert_annotation(&db, sample_dog, Some(cat_dog));
+        insert_annotation(&db, sample_cat, Some(cat_cat));
 
         let out = DatasetTransforms::filter_dataset(
             &db,
@@ -628,9 +608,9 @@ mod tests {
         .expect("filter by category");
 
         assert_eq!(
-            count_images(&db, out.id),
+            count_samples(&db, out.id),
             1,
-            "only the dog image should match"
+            "only the dog sample should match"
         );
     }
 
@@ -642,15 +622,15 @@ mod tests {
         let ds = setup_dataset(&db, "src-sample");
 
         for i in 0..10 {
-            insert_image(&db, ds.id, &format!("img{}.jpg", i));
+            insert_sample(&db, ds.id, &format!("sample{}", i));
         }
 
         let out = DatasetTransforms::sample_dataset(&db, "src-sample", 0.5, 42, "dst-sample")
             .expect("sample");
 
         // ceil(10 * 0.5) = 5
-        let n = count_images(&db, out.id);
-        assert_eq!(n, 5, "expected 5 sampled images, got {}", n);
+        let n = count_samples(&db, out.id);
+        assert_eq!(n, 5, "expected 5 sampled samples, got {}", n);
     }
 
     #[test]
@@ -659,7 +639,7 @@ mod tests {
         let ds = setup_dataset(&db, "src-det");
 
         for i in 0..20 {
-            insert_image(&db, ds.id, &format!("img{}.jpg", i));
+            insert_sample(&db, ds.id, &format!("sample{}", i));
         }
 
         let out1 = DatasetTransforms::sample_dataset(&db, "src-det", 0.3, 99, "dst-det-1")
@@ -667,10 +647,9 @@ mod tests {
         let out2 = DatasetTransforms::sample_dataset(&db, "src-det", 0.3, 99, "dst-det-2")
             .expect("sample 2");
 
-        // Same seed/ratio → same count
         assert_eq!(
-            count_images(&db, out1.id),
-            count_images(&db, out2.id),
+            count_samples(&db, out1.id),
+            count_samples(&db, out2.id),
             "same seed should produce same count"
         );
     }
@@ -729,22 +708,23 @@ mod tests {
         let db = setup_db();
         let ds = setup_dataset(&db, "src-resize");
 
-        // Insert an image pointing to a non-existent path so that both
-        // convert and python3 either fail or are absent.
-        insert_image(&db, ds.id, "fake.jpg");
+        // Insert a sample with an asset pointing to a non-existent path
+        let sample_id = insert_sample(&db, ds.id, "resize-sample");
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) \
+                 VALUES (?1, 'image', 'fake.jpg', '/tmp/fake.jpg')",
+                params![sample_id],
+            )
+            .expect("insert asset");
 
         let storage = StorageManager::new(std::path::PathBuf::from("/tmp/dman-test"));
 
-        // This may succeed if convert or python3 is installed (and fail gracefully).
-        // The important thing is it doesn't panic and returns a Result.
         let result = DatasetTransforms::resize_images(&db, &storage, "src-resize", 100, 100);
 
-        // On a system without convert/python3 or with a non-existent file, we expect
-        // either Ok (tool ran and failed silently is not our pattern — we'd get StorageError)
-        // or StorageError. Either way, it must not be a panic.
         match result {
             Ok(()) => {
-                // Tool was available and succeeded or image list was empty — acceptable.
+                // Tool was available and succeeded — acceptable.
             }
             Err(DmanError::StorageError(msg)) => {
                 assert!(
@@ -754,7 +734,6 @@ mod tests {
                 );
             }
             Err(e) => {
-                // Any other error is also acceptable (e.g., Io error from tool)
                 let _ = e;
             }
         }
@@ -767,22 +746,21 @@ mod tests {
         let db = setup_db();
         let ds = setup_dataset(&db, "src-meta");
 
-        // Insert images with different metadata
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path, metadata) VALUES (?1, 'a.jpg', '/tmp/a.jpg', '{\"split\": \"train\"}')",
+                "INSERT INTO samples (dataset_id, name, metadata) VALUES (?1, 'a', '{\"split\": \"train\"}')",
                 params![ds.id],
             )
             .expect("insert");
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path, metadata) VALUES (?1, 'b.jpg', '/tmp/b.jpg', '{\"split\": \"val\"}')",
+                "INSERT INTO samples (dataset_id, name, metadata) VALUES (?1, 'b', '{\"split\": \"val\"}')",
                 params![ds.id],
             )
             .expect("insert");
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'c.jpg', '/tmp/c.jpg')",
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 'c')",
                 params![ds.id],
             )
             .expect("insert");
@@ -798,9 +776,9 @@ mod tests {
         .expect("filter by metadata");
 
         assert_eq!(
-            count_images(&db, out.id),
+            count_samples(&db, out.id),
             1,
-            "only a.jpg should pass the metadata filter"
+            "only sample 'a' should pass the metadata filter"
         );
     }
 }

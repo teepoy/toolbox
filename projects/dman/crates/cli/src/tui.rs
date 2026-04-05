@@ -1,11 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use dman_core::{dataset::DatasetService, db::Database, types::Dataset};
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs},
-    Frame,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,10 +20,11 @@ enum View {
 
 #[derive(Debug, Clone)]
 struct DetailData {
-    image_count: u64,
+    sample_count: u64,
+    asset_count: u64,
     annotation_count: u64,
-    categories: Vec<String>,
-    images: Vec<(String, u64)>,
+    category_count: u64,
+    assets: Vec<(String, String, u64)>,
     schema_text: Option<String>,
 }
 
@@ -148,7 +149,7 @@ fn handle_key_detail(app: &mut App, key: KeyEvent, current_tab: usize, current_s
                 let max_scroll = app
                     .detail_data
                     .as_ref()
-                    .map(|d| d.images.len().saturating_sub(1))
+                    .map(|d| d.assets.len().saturating_sub(1))
                     .unwrap_or(0);
                 if let View::Detail {
                     dataset_name, tab, ..
@@ -228,12 +229,7 @@ fn draw_list(f: &mut Frame, app: &App) {
         app.datasets
             .iter()
             .map(|ds| {
-                let format_label = match &ds.format {
-                    dman_core::types::DatasetFormat::Yolo => "YOLO",
-                    dman_core::types::DatasetFormat::Coco => "COCO",
-                    dman_core::types::DatasetFormat::HuggingFace => "HF",
-                    dman_core::types::DatasetFormat::Custom(s) => s.as_str(),
-                };
+                let format_label = ds.format.as_str();
                 ListItem::new(Line::from(vec![
                     Span::raw(" "),
                     Span::styled(&ds.name, Style::default().add_modifier(Modifier::BOLD)),
@@ -276,12 +272,7 @@ fn draw_list(f: &mut Frame, app: &App) {
         ))]
     } else {
         let ds = &app.datasets[app.selected];
-        let format_str = match &ds.format {
-            dman_core::types::DatasetFormat::Yolo => "YOLO".to_string(),
-            dman_core::types::DatasetFormat::Coco => "COCO".to_string(),
-            dman_core::types::DatasetFormat::HuggingFace => "HuggingFace".to_string(),
-            dman_core::types::DatasetFormat::Custom(s) => s.clone(),
-        };
+        let format_str = ds.format.to_string();
         vec![
             Line::from(vec![
                 Span::styled("Name: ", Style::default().fg(Color::Cyan)),
@@ -385,7 +376,7 @@ fn draw_detail(f: &mut Frame, app: &App, dataset_name: &str, tab: usize, scroll:
     .block(Block::new().borders(Borders::ALL));
     f.render_widget(title, outer_chunks[0]);
 
-    let tab_titles = vec!["1:Info", "2:Images", "3:Categories", "4:Schema"];
+    let tab_titles = vec!["1:Info", "2:Assets", "3:Categories", "4:Schema"];
     let tabs = Tabs::new(tab_titles)
         .select(tab)
         .style(Style::default().fg(Color::DarkGray))
@@ -399,7 +390,7 @@ fn draw_detail(f: &mut Frame, app: &App, dataset_name: &str, tab: usize, scroll:
 
     match tab {
         0 => draw_detail_info(f, app, dataset, outer_chunks[2]),
-        1 => draw_detail_images(f, app, outer_chunks[2], scroll),
+        1 => draw_detail_assets(f, app, outer_chunks[2], scroll),
         2 => draw_detail_categories(f, app, outer_chunks[2]),
         3 => draw_detail_schema(f, app, dataset, outer_chunks[2]),
         _ => {}
@@ -426,7 +417,7 @@ fn draw_detail(f: &mut Frame, app: &App, dataset_name: &str, tab: usize, scroll:
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw("Scroll (Images)  "),
+        Span::raw("Scroll (Assets)  "),
         Span::styled(
             "[Ctrl+R] ",
             Style::default()
@@ -446,16 +437,14 @@ fn draw_detail_info(
     area: ratatui::layout::Rect,
 ) {
     let lines = if let Some(ds) = dataset {
-        let format_str = match &ds.format {
-            dman_core::types::DatasetFormat::Yolo => "YOLO".to_string(),
-            dman_core::types::DatasetFormat::Coco => "COCO".to_string(),
-            dman_core::types::DatasetFormat::HuggingFace => "HuggingFace".to_string(),
-            dman_core::types::DatasetFormat::Custom(s) => s.clone(),
-        };
+        let format_str = ds.format.to_string();
 
         let (image_count_str, annotation_count_str) = if let Some(ref data) = app.detail_data {
             (
-                data.image_count.to_string(),
+                format!(
+                    "{} samples / {} assets",
+                    data.sample_count, data.asset_count
+                ),
                 data.annotation_count.to_string(),
             )
         } else {
@@ -479,7 +468,7 @@ fn draw_detail_info(
             ]),
             Line::from(""),
             Line::from(vec![
-                Span::styled("  Images:       ", Style::default().fg(Color::Cyan)),
+                Span::styled("  Samples:      ", Style::default().fg(Color::Cyan)),
                 Span::raw(image_count_str),
             ]),
             Line::from(""),
@@ -511,21 +500,26 @@ fn draw_detail_info(
     f.render_widget(paragraph, area);
 }
 
-fn draw_detail_images(f: &mut Frame, app: &App, area: ratatui::layout::Rect, scroll: usize) {
+fn draw_detail_assets(f: &mut Frame, app: &App, area: ratatui::layout::Rect, scroll: usize) {
     let items: Vec<ListItem> = if let Some(ref data) = app.detail_data {
-        if data.images.is_empty() {
+        if data.assets.is_empty() {
             vec![ListItem::new(Span::styled(
-                " No images in this dataset.",
+                " No assets in this dataset.",
                 Style::default().fg(Color::DarkGray),
             ))]
         } else {
-            data.images
+            data.assets
                 .iter()
                 .skip(scroll)
-                .map(|(fname, ann_count)| {
+                .map(|(fname, asset_type, ann_count)| {
                     ListItem::new(Line::from(vec![
                         Span::raw("  "),
                         Span::styled(fname, Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw("  "),
+                        Span::styled(
+                            format!("[{}]", asset_type),
+                            Style::default().fg(Color::Cyan),
+                        ),
                         Span::raw("  "),
                         Span::styled(
                             format!("[{} ann]", ann_count),
@@ -537,14 +531,14 @@ fn draw_detail_images(f: &mut Frame, app: &App, area: ratatui::layout::Rect, scr
         }
     } else {
         vec![ListItem::new(Span::styled(
-            " Loading images...",
+            " Loading assets...",
             Style::default().fg(Color::DarkGray),
         ))]
     };
 
     let list = List::new(items).block(
         Block::new()
-            .title(" Images ")
+            .title(" Assets ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Blue)),
     );
@@ -553,21 +547,19 @@ fn draw_detail_images(f: &mut Frame, app: &App, area: ratatui::layout::Rect, scr
 
 fn draw_detail_categories(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let items: Vec<ListItem> = if let Some(ref data) = app.detail_data {
-        if data.categories.is_empty() {
+        if data.category_count == 0 {
             vec![ListItem::new(Span::styled(
                 " No categories defined.",
                 Style::default().fg(Color::DarkGray),
             ))]
         } else {
-            data.categories
-                .iter()
-                .map(|cat| {
-                    ListItem::new(Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(cat, Style::default().add_modifier(Modifier::BOLD)),
-                    ]))
-                })
-                .collect()
+            vec![ListItem::new(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    format!("{} categories", data.category_count),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+            ]))]
         }
     } else {
         vec![ListItem::new(Span::styled(
@@ -643,22 +635,24 @@ fn load_detail(dataset_name: &str) -> Option<DetailData> {
     let info = DatasetService::inspect(&db, dataset_name).ok()?;
     let dataset_id = info.dataset.id;
 
-    let images: Vec<(String, u64)> = {
+    let assets: Vec<(String, String, u64)> = {
         let mut stmt = db
             .conn
             .prepare(
-                "SELECT i.file_name, COUNT(a.id) as ann_count \
-                 FROM images i \
-                 LEFT JOIN annotations a ON a.image_id = i.id \
-                 WHERE i.dataset_id = ?1 \
-                 GROUP BY i.id \
-                 ORDER BY i.file_name",
+                "SELECT a.file_name, a.asset_type, COUNT(ann.id) as ann_count \
+                 FROM assets a \
+                 JOIN samples s ON a.sample_id = s.id \
+                 LEFT JOIN annotations ann ON ann.asset_id = a.id \
+                 WHERE s.dataset_id = ?1 \
+                 GROUP BY a.id \
+                 ORDER BY a.file_name",
             )
             .ok()?;
         stmt.query_map(rusqlite::params![dataset_id], |row| {
             let fname: String = row.get(0)?;
-            let cnt: i64 = row.get(1)?;
-            Ok((fname, cnt as u64))
+            let asset_type: String = row.get(1)?;
+            let cnt: i64 = row.get(2)?;
+            Ok((fname, asset_type, cnt as u64))
         })
         .ok()?
         .filter_map(|r| r.ok())
@@ -671,18 +665,17 @@ fn load_detail(dataset_name: &str) -> Option<DetailData> {
         .as_ref()
         .and_then(|p| std::fs::read_to_string(p).ok());
 
-    let categories: Vec<String> = info.categories.iter().map(|c| c.name.clone()).collect();
-
     Some(DetailData {
-        image_count: info.image_count,
+        sample_count: info.sample_count,
+        asset_count: info.asset_count,
         annotation_count: info.annotation_count,
-        categories,
-        images,
+        category_count: info.category_count,
+        assets,
         schema_text,
     })
 }
 
-fn main() -> anyhow::Result<()> {
+pub fn run() -> anyhow::Result<()> {
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
@@ -735,7 +728,7 @@ mod tests {
             id,
             name: name.to_string(),
             path: PathBuf::from("/tmp/test"),
-            format: DatasetFormat::Yolo,
+            format: DatasetFormat::yolo(),
             schema_path: None,
             created_at: "2024-01-01".to_string(),
             updated_at: None,
@@ -943,13 +936,14 @@ mod tests {
             scroll: 0,
         };
         app.detail_data = Some(DetailData {
-            image_count: 3,
+            sample_count: 3,
+            asset_count: 3,
             annotation_count: 5,
-            categories: vec![],
-            images: vec![
-                ("a.jpg".to_string(), 1),
-                ("b.jpg".to_string(), 2),
-                ("c.jpg".to_string(), 0),
+            category_count: 0,
+            assets: vec![
+                ("a.jpg".to_string(), "image".to_string(), 1),
+                ("b.jpg".to_string(), "image".to_string(), 2),
+                ("c.jpg".to_string(), "image".to_string(), 0),
             ],
             schema_text: None,
         });
@@ -993,10 +987,11 @@ mod tests {
             scroll: 0,
         };
         app.detail_data = Some(DetailData {
-            image_count: 1,
+            sample_count: 1,
+            asset_count: 1,
             annotation_count: 0,
-            categories: vec![],
-            images: vec![],
+            category_count: 0,
+            assets: vec![],
             schema_text: None,
         });
 

@@ -25,6 +25,15 @@ pub enum DmanError {
     #[error("Dataset not found: {0}")]
     DatasetNotFound(String),
 
+    #[error("sample not found: {0}")]
+    SampleNotFound(String),
+
+    #[error("asset not found: {0}")]
+    AssetNotFound(String),
+
+    #[error("invalid asset type: {0}")]
+    InvalidAssetType(String),
+
     #[error("dataset already exists: {0}")]
     DatasetAlreadyExists(String),
 
@@ -73,6 +82,24 @@ mod tests {
     fn test_display_dataset_not_found() {
         let e = DmanError::DatasetNotFound("my-dataset".to_string());
         assert!(e.to_string().contains("my-dataset"));
+    }
+
+    #[test]
+    fn sample_not_found_displays_correctly() {
+        let e = DmanError::SampleNotFound("sample-123".to_string());
+        assert!(e.to_string().contains("sample-123"));
+    }
+
+    #[test]
+    fn asset_not_found_displays_correctly() {
+        let e = DmanError::AssetNotFound("asset-123".to_string());
+        assert!(e.to_string().contains("asset-123"));
+    }
+
+    #[test]
+    fn invalid_asset_type_displays_correctly() {
+        let e = DmanError::InvalidAssetType("gif".to_string());
+        assert!(e.to_string().contains("gif"));
     }
 
     #[test]

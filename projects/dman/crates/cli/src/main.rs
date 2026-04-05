@@ -1,14 +1,17 @@
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use comfy_table::{Cell, Table};
 use dman_core::catalog::Catalog;
 use dman_core::dataset::DatasetService;
+use dman_core::formats::FormatRegistry;
+use dman_core::storage::StorageManager;
 use dman_core::types::DatasetFormat;
 use dman_server::label_studio::LabelStudioClient;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+mod tui;
 
 #[derive(Parser)]
 #[command(
@@ -33,9 +36,8 @@ enum Commands {
         name: String,
         /// Path to the dataset directory or file
         path: PathBuf,
-        /// Dataset format
-        #[arg(long, value_enum, default_value = "custom")]
-        format: FormatArg,
+        #[arg(long)]
+        format: String,
     },
 
     /// List all registered datasets
@@ -64,9 +66,8 @@ enum Commands {
     Import {
         /// Path to import from
         path: PathBuf,
-        /// Dataset format
-        #[arg(long, value_enum)]
-        format: Option<FormatArg>,
+        #[arg(long)]
+        format: Option<String>,
         /// Name to assign to the imported dataset
         #[arg(long)]
         name: Option<String>,
@@ -78,9 +79,8 @@ enum Commands {
         name: String,
         /// Output path
         output: PathBuf,
-        /// Target format
-        #[arg(long, value_enum)]
-        format: FormatArg,
+        #[arg(long)]
+        format: String,
     },
 
     /// Apply operations to a dataset (not yet implemented)
@@ -109,7 +109,7 @@ enum Commands {
         batch_size: usize,
     },
 
-    /// Launch the terminal UI (not yet implemented)
+    /// Launch the interactive terminal UI
     Tui,
 
     /// Materialize a virtual dataset (not yet implemented)
@@ -137,25 +137,6 @@ enum LsCommand {
     },
 }
 
-#[derive(Clone, Debug, ValueEnum)]
-enum FormatArg {
-    Yolo,
-    Coco,
-    Hf,
-    Custom,
-}
-
-impl From<FormatArg> for DatasetFormat {
-    fn from(arg: FormatArg) -> Self {
-        match arg {
-            FormatArg::Yolo => DatasetFormat::Yolo,
-            FormatArg::Coco => DatasetFormat::Coco,
-            FormatArg::Hf => DatasetFormat::HuggingFace,
-            FormatArg::Custom => DatasetFormat::Custom("custom".to_string()),
-        }
-    }
-}
-
 #[derive(Clone, ValueEnum)]
 enum ListFormat {
     Table,
@@ -171,18 +152,21 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    let registry = build_registry();
     match cli.command {
         Commands::Init => cmd_init(),
-        Commands::Add { name, path, format } => cmd_add(&name, &path, format.into()),
+        Commands::Add { name, path, format } => cmd_add(&name, &path, DatasetFormat::new(format)),
         Commands::List { format } => cmd_list(format),
         Commands::Inspect { name } => cmd_inspect(&name),
         Commands::Remove { name, yes } => cmd_remove(&name, yes),
-        Commands::Import { path, format, name } => cmd_import_stub(&path, format, name.as_deref()),
+        Commands::Import { path, format, name } => {
+            cmd_import(&registry, &path, format.as_deref(), name.as_deref())
+        }
         Commands::Export {
             name,
             output,
             format,
-        } => cmd_export_stub(&name, &output, format),
+        } => cmd_export(&registry, &name, &output, &format),
         Commands::Operate => cmd_stub("operate"),
         Commands::Virtual => cmd_stub("virtual"),
         Commands::Serve { port } => cmd_serve_stub(port),
@@ -192,7 +176,7 @@ fn run(cli: Cli) -> Result<()> {
             model,
             batch_size,
         } => cmd_embed(&dataset_name, &model, batch_size),
-        Commands::Tui => cmd_stub("tui"),
+        Commands::Tui => tui::run(),
         Commands::Materialize { name } => cmd_materialize_stub(&name),
     }
 }
@@ -232,7 +216,7 @@ fn cmd_add(name: &str, path: &Path, format: DatasetFormat) -> Result<()> {
     let ds = DatasetService::register(catalog.db(), name, path, format)
         .with_context(|| format!("failed to register dataset '{name}'"))?;
     println!(
-        "{} Registered dataset '{}' (id={}, format={:?})",
+        "{} Registered dataset '{}' (id={}, format={})",
         "✓".green().bold(),
         ds.name.cyan(),
         ds.id,
@@ -268,12 +252,7 @@ fn cmd_list(format: ListFormat) -> Result<()> {
                 Cell::new("Created"),
             ]);
             for ds in &datasets {
-                let format_str = match &ds.format {
-                    DatasetFormat::Yolo => "yolo".to_string(),
-                    DatasetFormat::Coco => "coco".to_string(),
-                    DatasetFormat::HuggingFace => "hf".to_string(),
-                    DatasetFormat::Custom(s) => format!("custom:{s}"),
-                };
+                let format_str = ds.format.to_string();
                 table.add_row(vec![
                     Cell::new(ds.id),
                     Cell::new(&ds.name),
@@ -295,12 +274,7 @@ fn cmd_inspect(name: &str) -> Result<()> {
         .with_context(|| format!("failed to inspect dataset '{name}'"))?;
 
     let ds = &info.dataset;
-    let format_str = match &ds.format {
-        DatasetFormat::Yolo => "yolo".to_string(),
-        DatasetFormat::Coco => "coco".to_string(),
-        DatasetFormat::HuggingFace => "hf".to_string(),
-        DatasetFormat::Custom(s) => format!("custom:{s}"),
-    };
+    let format_str = ds.format.to_string();
 
     println!("{}", "─".repeat(50).dimmed());
     println!("  {} {}", "Name:".bold(), ds.name.cyan());
@@ -312,21 +286,14 @@ fn cmd_inspect(name: &str) -> Result<()> {
         println!("  {} {}", "Updated:".bold(), updated);
     }
     println!("{}", "─".repeat(50).dimmed());
-    println!("  {} {}", "Images:".bold(), info.image_count);
+    println!("  {} {}", "Samples:".bold(), info.sample_count);
+    println!("  {} {}", "Assets:".bold(), info.asset_count);
     println!("  {} {}", "Annotations:".bold(), info.annotation_count);
     println!("  {} {} B", "Disk size:".bold(), info.disk_size_bytes);
 
-    if !info.categories.is_empty() {
+    if info.category_count > 0 {
         println!("{}", "─".repeat(50).dimmed());
-        println!("  {}:", "Categories".bold());
-        for cat in &info.categories {
-            let sup = cat
-                .supercategory
-                .as_deref()
-                .map(|s| format!(" ({})", s))
-                .unwrap_or_default();
-            println!("    • {}{}", cat.name, sup);
-        }
+        println!("  {} {}", "Categories:".bold(), info.category_count);
     }
 
     if let Some(meta) = &ds.metadata {
@@ -365,22 +332,64 @@ fn cmd_remove(name: &str, yes: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_import_stub(path: &Path, format: Option<FormatArg>, name: Option<&str>) -> Result<()> {
-    eprintln!(
-        "{} import is not yet implemented (path={}, format={:?}, name={:?})",
-        "stub:".yellow().bold(),
-        path.display(),
-        format.map(|f| format!("{f:?}")),
-        name
+fn cmd_import(
+    registry: &FormatRegistry,
+    path: &Path,
+    format: Option<&str>,
+    name: Option<&str>,
+) -> Result<()> {
+    let catalog = open_catalog()?;
+    let storage = StorageManager::new(catalog.data_path());
+    let format_id = match format {
+        Some(value) => DatasetFormat::new(value).to_string(),
+        None => registry
+            .detect_format(path)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no registered format provider detected for {}",
+                    path.display()
+                )
+            })?,
+    };
+    let importer = registry
+        .get_importer(&format_id)
+        .ok_or_else(|| anyhow::anyhow!("no importer registered for format '{}'", format_id))?;
+    let dataset_name = name.ok_or_else(|| anyhow::anyhow!("--name is required when importing"))?;
+    let dataset = importer
+        .import(catalog.db(), &storage, path, dataset_name)
+        .with_context(|| format!("failed to import '{}' as {}", path.display(), format_id))?;
+
+    println!(
+        "{} Imported '{}' as dataset '{}' (id={}, format={})",
+        "✓".green().bold(),
+        path.display().to_string().cyan(),
+        dataset.name.cyan(),
+        dataset.id,
+        dataset.format
     );
     Ok(())
 }
 
-fn cmd_export_stub(name: &str, output: &Path, _format: FormatArg) -> Result<()> {
-    eprintln!(
-        "{} export is not yet implemented (name={name}, output={})",
-        "stub:".yellow().bold(),
-        output.display()
+fn cmd_export(registry: &FormatRegistry, name: &str, output: &Path, format: &str) -> Result<()> {
+    let catalog = open_catalog()?;
+    let storage = StorageManager::new(catalog.data_path());
+    let dataset = DatasetService::get(catalog.db(), name)
+        .with_context(|| format!("failed to find dataset '{name}'"))?;
+    let format_id = DatasetFormat::new(format).to_string();
+    let exporter = registry
+        .get_exporter(&format_id)
+        .ok_or_else(|| anyhow::anyhow!("no exporter registered for format '{}'", format_id))?;
+    exporter
+        .export(catalog.db(), &storage, &dataset, output)
+        .with_context(|| format!("failed to export dataset '{name}' as {}", format_id))?;
+
+    println!(
+        "{} Exported dataset '{}' to {} as {}",
+        "✓".green().bold(),
+        dataset.name.cyan(),
+        output.display().to_string().cyan(),
+        format_id
     );
     Ok(())
 }
@@ -439,7 +448,7 @@ fn cmd_label_studio_export(
     Ok(())
 }
 
-fn cmd_embed(dataset_name: &str, model: &PathBuf, batch_size: usize) -> Result<()> {
+fn cmd_embed(dataset_name: &str, model: &Path, batch_size: usize) -> Result<()> {
     let catalog = open_catalog()?;
     let dataset = DatasetService::get(catalog.db(), dataset_name)
         .with_context(|| format!("failed to find dataset '{dataset_name}'"))?;
@@ -495,4 +504,28 @@ fn cmd_stub(cmd: &str) -> Result<()> {
 
 fn open_catalog() -> Result<Catalog> {
     Catalog::open().context("catalog not found — run `dman init` first")
+}
+
+fn build_registry() -> FormatRegistry {
+    let mut registry = FormatRegistry::default_registry();
+
+    #[cfg(feature = "python")]
+    {
+        if let Ok(catalog) = Catalog::open()
+            && let Ok(plugin_registry) =
+                dman_python::plugins::format::load_python_format_registry(vec![
+                    catalog.plugins_path(),
+                ])
+        {
+            let (importers, exporters) = plugin_registry.into_parts();
+            for importer in importers {
+                registry.register_importer(importer);
+            }
+            for exporter in exporters {
+                registry.register_exporter(exporter);
+            }
+        }
+    }
+
+    registry
 }

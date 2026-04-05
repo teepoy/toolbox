@@ -30,7 +30,7 @@ impl StorageManager {
         Self { base_path }
     }
 
-    pub fn store_image(
+    pub fn store_asset(
         &self,
         dataset_id: i64,
         source_path: &Path,
@@ -43,14 +43,14 @@ impl StorageManager {
         match strategy {
             StorageStrategy::Reference => Ok(source_path.to_path_buf()),
             StorageStrategy::Copy => {
-                let dest_dir = self.base_path.join(dataset_id.to_string()).join("images");
+                let dest_dir = self.base_path.join(dataset_id.to_string()).join("assets");
                 fs::create_dir_all(&dest_dir)?;
                 let dest_path = dest_dir.join(file_name);
                 fs::copy(source_path, &dest_path)?;
                 Ok(dest_path)
             }
             StorageStrategy::Symlink => {
-                let dest_dir = self.base_path.join(dataset_id.to_string()).join("images");
+                let dest_dir = self.base_path.join(dataset_id.to_string()).join("assets");
                 fs::create_dir_all(&dest_dir)?;
                 let dest_path = dest_dir.join(file_name);
                 let abs_source = source_path.canonicalize()?;
@@ -60,21 +60,21 @@ impl StorageManager {
         }
     }
 
-    pub fn get_image_path(&self, dataset_id: i64, file_name: &str) -> PathBuf {
+    pub fn get_asset_path(&self, dataset_id: i64, file_name: &str) -> PathBuf {
         self.base_path
             .join(dataset_id.to_string())
-            .join("images")
+            .join("assets")
             .join(file_name)
     }
 
-    pub fn delete_image(&self, stored_path: &Path) -> Result<()> {
+    pub fn delete_asset(&self, stored_path: &Path) -> Result<()> {
         if stored_path.exists() || stored_path.symlink_metadata().is_ok() {
             fs::remove_file(stored_path)?;
         }
         Ok(())
     }
 
-    pub fn delete_dataset_images(&self, dataset_id: i64) -> Result<()> {
+    pub fn delete_dataset_storage(&self, dataset_id: i64) -> Result<()> {
         let dir = self.base_path.join(dataset_id.to_string());
         if dir.exists() {
             fs::remove_dir_all(&dir)?;
@@ -104,7 +104,7 @@ impl StorageManager {
     pub fn check_integrity(&self, db: &Database, dataset_id: i64) -> Result<IntegrityReport> {
         let mut stmt = db
             .conn
-            .prepare("SELECT file_path FROM images WHERE dataset_id = ?")?;
+            .prepare("SELECT a.file_path FROM assets a JOIN samples s ON a.sample_id = s.id WHERE s.dataset_id = ?1")?;
         let paths: Vec<String> = stmt
             .query_map(rusqlite::params![dataset_id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -155,41 +155,41 @@ mod tests {
     }
 
     #[test]
-    fn test_get_image_path() {
+    fn test_get_asset_path() {
         let tmp = tempdir().unwrap();
         let mgr = StorageManager::new(tmp.path().to_path_buf());
-        let p = mgr.get_image_path(42, "foo.jpg");
-        assert_eq!(p, tmp.path().join("42").join("images").join("foo.jpg"));
+        let p = mgr.get_asset_path(42, "foo.jpg");
+        assert_eq!(p, tmp.path().join("42").join("assets").join("foo.jpg"));
     }
 
     #[test]
-    fn test_store_image_copy() {
+    fn test_store_asset_copy() {
         let tmp = tempdir().unwrap();
         let src_dir = tempdir().unwrap();
         let src = make_test_file(src_dir.path(), "img.png", b"image data");
 
         let mgr = StorageManager::new(tmp.path().to_path_buf());
         let dest = mgr
-            .store_image(1, &src, StorageStrategy::Copy)
-            .expect("store_image copy");
+            .store_asset(1, &src, StorageStrategy::Copy)
+            .expect("store_asset copy");
 
         assert!(dest.exists(), "copied file should exist");
-        let expected = tmp.path().join("1").join("images").join("img.png");
+        let expected = tmp.path().join("1").join("assets").join("img.png");
         assert_eq!(dest, expected);
         let content = fs::read(&dest).unwrap();
         assert_eq!(content, b"image data");
     }
 
     #[test]
-    fn test_store_image_symlink() {
+    fn test_store_asset_symlink() {
         let tmp = tempdir().unwrap();
         let src_dir = tempdir().unwrap();
         let src = make_test_file(src_dir.path(), "img.png", b"symlink data");
 
         let mgr = StorageManager::new(tmp.path().to_path_buf());
         let dest = mgr
-            .store_image(2, &src, StorageStrategy::Symlink)
-            .expect("store_image symlink");
+            .store_asset(2, &src, StorageStrategy::Symlink)
+            .expect("store_asset symlink");
 
         assert!(dest.exists(), "symlink target should resolve");
         let meta = dest.symlink_metadata().unwrap();
@@ -199,48 +199,49 @@ mod tests {
     }
 
     #[test]
-    fn test_store_image_reference() {
+    fn test_store_asset_reference() {
         let tmp = tempdir().unwrap();
         let src_dir = tempdir().unwrap();
         let src = make_test_file(src_dir.path(), "img.png", b"ref data");
 
         let mgr = StorageManager::new(tmp.path().to_path_buf());
         let dest = mgr
-            .store_image(3, &src, StorageStrategy::Reference)
-            .expect("store_image reference");
+            .store_asset(3, &src, StorageStrategy::Reference)
+            .expect("store_asset reference");
 
         assert_eq!(dest, src, "reference should return original path");
     }
 
     #[test]
-    fn test_delete_image() {
+    fn test_delete_asset() {
         let tmp = tempdir().unwrap();
         let src_dir = tempdir().unwrap();
         let src = make_test_file(src_dir.path(), "del.png", b"to delete");
 
         let mgr = StorageManager::new(tmp.path().to_path_buf());
         let dest = mgr
-            .store_image(4, &src, StorageStrategy::Copy)
-            .expect("store_image");
+            .store_asset(4, &src, StorageStrategy::Copy)
+            .expect("store_asset");
 
         assert!(dest.exists());
-        mgr.delete_image(&dest).expect("delete_image");
+        mgr.delete_asset(&dest).expect("delete_asset");
         assert!(!dest.exists(), "file should be deleted");
     }
 
     #[test]
-    fn test_delete_dataset_images() {
+    fn test_delete_dataset_storage() {
         let tmp = tempdir().unwrap();
         let src_dir = tempdir().unwrap();
         let src = make_test_file(src_dir.path(), "img.png", b"dataset data");
 
         let mgr = StorageManager::new(tmp.path().to_path_buf());
-        mgr.store_image(5, &src, StorageStrategy::Copy)
-            .expect("store_image");
+        mgr.store_asset(5, &src, StorageStrategy::Copy)
+            .expect("store_asset");
 
         let ds_dir = tmp.path().join("5");
         assert!(ds_dir.exists());
-        mgr.delete_dataset_images(5).expect("delete_dataset_images");
+        mgr.delete_dataset_storage(5)
+            .expect("delete_dataset_storage");
         assert!(!ds_dir.exists(), "dataset dir should be removed");
     }
 
@@ -283,15 +284,30 @@ mod tests {
             })
             .unwrap();
 
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                rusqlite::params![dataset_id, "sample1"],
+            )
+            .unwrap();
+        let sample_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT id FROM samples WHERE dataset_id = ?1 AND name = ?2",
+                rusqlite::params![dataset_id, "sample1"],
+                |row| row.get(0),
+            )
+            .unwrap();
+
         let mgr = StorageManager::new(tmp.path().to_path_buf());
         let stored = mgr
-            .store_image(dataset_id, &src, StorageStrategy::Copy)
+            .store_asset(dataset_id, &src, StorageStrategy::Copy)
             .expect("store");
 
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                rusqlite::params![dataset_id, "img.png", stored.to_str().unwrap()],
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', ?2, ?3)",
+                rusqlite::params![sample_id, "img.png", stored.to_str().unwrap()],
             )
             .unwrap();
 
@@ -319,11 +335,26 @@ mod tests {
             })
             .unwrap();
 
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                rusqlite::params![dataset_id, "sample2"],
+            )
+            .unwrap();
+        let sample_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT id FROM samples WHERE dataset_id = ?1 AND name = ?2",
+                rusqlite::params![dataset_id, "sample2"],
+                |row| row.get(0),
+            )
+            .unwrap();
+
         let ghost_path = "/nonexistent/path/ghost.jpg";
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                rusqlite::params![dataset_id, "ghost.jpg", ghost_path],
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', ?2, ?3)",
+                rusqlite::params![sample_id, "ghost.jpg", ghost_path],
             )
             .unwrap();
 
@@ -336,19 +367,19 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_nonexistent_image_is_ok() {
+    fn test_delete_nonexistent_asset_is_ok() {
         let tmp = tempdir().unwrap();
         let mgr = StorageManager::new(tmp.path().to_path_buf());
         let fake = tmp.path().join("nope.png");
-        mgr.delete_image(&fake)
+        mgr.delete_asset(&fake)
             .expect("delete nonexistent should be ok");
     }
 
     #[test]
-    fn test_delete_dataset_images_nonexistent_is_ok() {
+    fn test_delete_dataset_storage_nonexistent_is_ok() {
         let tmp = tempdir().unwrap();
         let mgr = StorageManager::new(tmp.path().to_path_buf());
-        mgr.delete_dataset_images(999)
+        mgr.delete_dataset_storage(999)
             .expect("delete nonexistent dataset dir ok");
     }
 }

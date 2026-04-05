@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+default = ["python"]
 python = ["dman-python/python"]
 
 [dependencies]
@@ -15,6 +16,10 @@ dman-server = { path = "../server" }
 comfy-table = "7"
 colored = "2"
 serde_json = { workspace = true }
+crossterm = { workspace = true }
+ratatui = { workspace = true }
+rusqlite = { workspace = true }
+dirs = "5"
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

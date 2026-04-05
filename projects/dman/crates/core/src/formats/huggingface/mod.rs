@@ -5,8 +5,8 @@ use std::sync::Arc;
 use arrow::array::{Array, ArrayRef, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use rusqlite::params;
 use walkdir::WalkDir;
 
@@ -14,7 +14,7 @@ use crate::dataset::DatasetService;
 use crate::db::Database;
 use crate::formats::{FormatExporter, FormatImporter};
 use crate::storage::StorageManager;
-use crate::types::{Dataset, DatasetFormat};
+use crate::types::{AssetType, Dataset, DatasetFormat};
 use crate::{DmanError, Result};
 
 const IMAGE_COLUMN_NAMES: &[&str] = &["file_name", "image", "path", "image_path"];
@@ -60,7 +60,8 @@ impl FormatImporter for HuggingFaceImporter {
             });
         }
 
-        let dataset = DatasetService::register(db, dataset_name, path, DatasetFormat::HuggingFace)?;
+        let dataset =
+            DatasetService::register(db, dataset_name, path, DatasetFormat::huggingface())?;
 
         let mut records: Vec<(String, String, String)> = Vec::new();
 
@@ -151,11 +152,24 @@ impl FormatImporter for HuggingFaceImporter {
             .map_err(DmanError::Database)?;
 
         let insert_result = (|| -> Result<()> {
-            for (file_name, file_path, metadata_json) in &records {
+            for (file_name, file_path, _metadata_json) in &records {
+                let stem = std::path::Path::new(file_name)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(file_name.as_str())
+                    .to_string();
+                let asset_type_str = AssetType::Image.to_string();
                 db.conn
                     .execute(
-                        "INSERT INTO images (dataset_id, file_name, file_path, metadata) VALUES (?1, ?2, ?3, ?4)",
-                        params![dataset.id, file_name, file_path, metadata_json],
+                        "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                        params![dataset.id, stem],
+                    )
+                    .map_err(DmanError::Database)?;
+                let sample_id = db.conn.last_insert_rowid();
+                db.conn
+                    .execute(
+                        "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, ?2, ?3, ?4)",
+                        params![sample_id, asset_type_str, file_name, file_path],
                     )
                     .map_err(DmanError::Database)?;
             }
@@ -194,7 +208,11 @@ impl FormatExporter for HuggingFaceExporter {
         let mut stmt = db
             .conn
             .prepare(
-                "SELECT file_name, file_path, metadata FROM images WHERE dataset_id = ?1 ORDER BY id",
+                "SELECT a.file_name, a.file_path, a.metadata \
+                 FROM assets a \
+                 JOIN samples s ON a.sample_id = s.id \
+                 WHERE s.dataset_id = ?1 \
+                 ORDER BY a.id",
             )
             .map_err(DmanError::Database)?;
 
@@ -324,17 +342,17 @@ mod tests {
             .expect("import should succeed");
 
         assert_eq!(dataset.name, "hf-test");
-        assert_eq!(dataset.format, DatasetFormat::HuggingFace);
+        assert_eq!(dataset.format, DatasetFormat::huggingface());
 
         let count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 params![dataset.id],
                 |row| row.get(0),
             )
             .expect("count query");
-        assert_eq!(count, 3, "fixture has 3 rows -> 3 images expected");
+        assert_eq!(count, 3, "fixture has 3 rows -> 3 samples expected");
     }
 
     #[test]
@@ -350,7 +368,11 @@ mod tests {
 
         let mut stmt = db
             .conn
-            .prepare("SELECT file_name FROM images WHERE dataset_id = ?1 ORDER BY id")
+            .prepare(
+                "SELECT a.file_name FROM assets a \
+                 JOIN samples s ON a.sample_id = s.id \
+                 WHERE s.dataset_id = ?1 ORDER BY a.id",
+            )
             .expect("prepare");
         let names: Vec<String> = stmt
             .query_map(params![dataset.id], |row| row.get(0))

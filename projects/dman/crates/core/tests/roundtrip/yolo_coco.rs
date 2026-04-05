@@ -57,7 +57,7 @@ fn yolo_import_then_coco_export_preserves_image_count() {
 
     let img_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+        "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
         dataset.id,
     );
     assert_eq!(img_count, 1, "imported 1 image from YOLO fixture");
@@ -159,7 +159,7 @@ fn yolo_import_coco_export_reimport_image_count_matches() {
 
     let original_img_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+        "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
         yolo_ds.id,
     );
 
@@ -176,7 +176,7 @@ fn yolo_import_coco_export_reimport_image_count_matches() {
 
     let reimported_img_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+        "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
         reimported_ds.id,
     );
 
@@ -202,8 +202,8 @@ fn yolo_import_coco_export_reimport_annotation_count_matches() {
 
     let original_ann_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM annotations WHERE image_id IN \
-         (SELECT id FROM images WHERE dataset_id = ?1)",
+        "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+         (SELECT id FROM samples WHERE dataset_id = ?1)",
         yolo_ds.id,
     );
 
@@ -220,8 +220,8 @@ fn yolo_import_coco_export_reimport_annotation_count_matches() {
 
     let reimported_ann_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM annotations WHERE image_id IN \
-         (SELECT id FROM images WHERE dataset_id = ?1)",
+        "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+         (SELECT id FROM samples WHERE dataset_id = ?1)",
         reimported_ds.id,
     );
 
@@ -248,8 +248,8 @@ fn yolo_import_coco_export_reimport_bbox_values_within_epsilon() {
     let original_bbox_str: String = db
         .conn
         .query_row(
-            "SELECT bbox FROM annotations WHERE image_id IN \
-             (SELECT id FROM images WHERE dataset_id = ?1) LIMIT 1",
+            "SELECT bbox FROM annotations WHERE sample_id IN \
+             (SELECT id FROM samples WHERE dataset_id = ?1) LIMIT 1",
             rusqlite::params![yolo_ds.id],
             |row| row.get(0),
         )
@@ -271,8 +271,8 @@ fn yolo_import_coco_export_reimport_bbox_values_within_epsilon() {
     let reimported_bbox_str: String = db
         .conn
         .query_row(
-            "SELECT bbox FROM annotations WHERE image_id IN \
-             (SELECT id FROM images WHERE dataset_id = ?1) LIMIT 1",
+            "SELECT bbox FROM annotations WHERE sample_id IN \
+             (SELECT id FROM samples WHERE dataset_id = ?1) LIMIT 1",
             rusqlite::params![reimported_ds.id],
             |row| row.get(0),
         )
@@ -281,7 +281,7 @@ fn yolo_import_coco_export_reimport_bbox_values_within_epsilon() {
         serde_json::from_str(&reimported_bbox_str).expect("parse reimported bbox");
 
     const EPSILON: f64 = 1e-4;
-    for key in &["x", "y", "w", "h"] {
+    for key in &["x", "y", "width", "height"] {
         let orig_v = orig_bbox[key].as_f64().expect("original bbox value");
         let re_v = re_bbox[key].as_f64().expect("reimported bbox value");
         assert!(
@@ -309,8 +309,8 @@ fn yolo_import_yolo_export_roundtrip_annotation_count() {
 
     let ann_count_before = count_query(
         &db,
-        "SELECT COUNT(*) FROM annotations WHERE image_id IN \
-         (SELECT id FROM images WHERE dataset_id = ?1)",
+        "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+         (SELECT id FROM samples WHERE dataset_id = ?1)",
         dataset.id,
     );
 
@@ -327,8 +327,8 @@ fn yolo_import_yolo_export_roundtrip_annotation_count() {
 
     let ann_count_after = count_query(
         &db2,
-        "SELECT COUNT(*) FROM annotations WHERE image_id IN \
-         (SELECT id FROM images WHERE dataset_id = ?1)",
+        "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+         (SELECT id FROM samples WHERE dataset_id = ?1)",
         dataset2.id,
     );
 

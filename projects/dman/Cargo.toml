@@ -2,7 +2,6 @@
 members = [
     "crates/core",
     "crates/cli",
-    "crates/tui",
     "crates/server",
     "crates/python",
 ]

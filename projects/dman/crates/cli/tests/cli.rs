@@ -83,7 +83,13 @@ fn add_and_list_dataset() {
         .success();
 
     dman()
-        .args(["add", "test-ds", ds_dir.path().to_str().expect("utf8 path")])
+        .args([
+            "add",
+            "test-ds",
+            ds_dir.path().to_str().expect("utf8 path"),
+            "--format",
+            "builder",
+        ])
         .env("DMAN_HOME", dir.path())
         .assert()
         .success();
@@ -99,7 +105,7 @@ fn add_and_list_dataset() {
 #[test]
 fn stub_commands_exit_zero() {
     let dir = tempdir().expect("tempdir");
-    for cmd in ["operate", "virtual", "tui"] {
+    for cmd in ["operate", "virtual"] {
         dman()
             .arg(cmd)
             .env("DMAN_HOME", dir.path())

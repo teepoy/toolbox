@@ -3,10 +3,10 @@ pub mod huggingface;
 pub mod yolo;
 use std::path::Path;
 
+use crate::Result;
 use crate::db::Database;
 use crate::storage::StorageManager;
 use crate::types::Dataset;
-use crate::Result;
 
 /// A plugin that can import a dataset from an on-disk format into `dman`.
 ///
@@ -52,10 +52,6 @@ pub trait FormatExporter: Send + Sync {
 }
 
 /// Central registry for format importers and exporters.
-///
-/// Use [`FormatRegistry::default_registry`] to obtain a registry pre-populated
-/// with stub implementations for YOLO, COCO, and HuggingFace.  Real
-/// implementations will be registered once T12-T14 are complete.
 pub struct FormatRegistry {
     importers: Vec<Box<dyn FormatImporter>>,
     exporters: Vec<Box<dyn FormatExporter>>,
@@ -107,17 +103,11 @@ impl FormatRegistry {
             .map(|exp| exp.as_ref())
     }
 
-    /// Build a registry pre-populated with stub importers/exporters for all
-    /// known formats.
-    ///
-    /// The stubs satisfy the interface contract but do not implement any real
-    /// I/O; they exist so that callers can query the registry before the real
-    /// T12-T14 implementations land.
     pub fn default_registry() -> Self {
         let mut registry = Self::new();
 
-        registry.register_importer(Box::new(YoloStubImporter));
-        registry.register_exporter(Box::new(YoloStubExporter));
+        registry.register_importer(Box::new(yolo::YoloImporter));
+        registry.register_exporter(Box::new(yolo::YoloExporter));
 
         registry.register_importer(Box::new(coco::CocoImporter));
         registry.register_exporter(Box::new(coco::CocoExporter));
@@ -132,56 +122,6 @@ impl FormatRegistry {
 impl Default for FormatRegistry {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// YOLO stub importer.
-///
-/// Detection heuristic: the directory at `path` contains a `data.yaml` file.
-struct YoloStubImporter;
-
-impl FormatImporter for YoloStubImporter {
-    fn name(&self) -> &str {
-        "yolo"
-    }
-
-    /// Returns `false` — real detection (presence of `data.yaml`) is
-    /// implemented in the T12 YOLO importer.
-    fn detect(&self, _path: &Path) -> bool {
-        false
-    }
-
-    fn import(
-        &self,
-        _db: &Database,
-        _storage: &StorageManager,
-        _path: &Path,
-        _dataset_name: &str,
-    ) -> Result<Dataset> {
-        Err(crate::DmanError::FormatUnsupported(
-            "YOLO importer not yet implemented (T12)".to_string(),
-        ))
-    }
-}
-
-/// YOLO stub exporter.
-struct YoloStubExporter;
-
-impl FormatExporter for YoloStubExporter {
-    fn name(&self) -> &str {
-        "yolo"
-    }
-
-    fn export(
-        &self,
-        _db: &Database,
-        _storage: &StorageManager,
-        _dataset: &Dataset,
-        _output_path: &Path,
-    ) -> Result<()> {
-        Err(crate::DmanError::FormatUnsupported(
-            "YOLO exporter not yet implemented (T12)".to_string(),
-        ))
     }
 }
 
@@ -272,30 +212,20 @@ mod tests {
     }
 
     #[test]
-    fn stubs_detect_returns_false_for_any_path() {
+    fn detect_format_returns_none_for_unknown_path() {
         let reg = FormatRegistry::default_registry();
         let arbitrary = Path::new("/tmp/some_dataset_dir");
         assert!(
             reg.detect_format(arbitrary).is_none(),
-            "stub detect() must return false so detect_format returns None"
+            "detect_format should return None when no built-in provider matches"
         );
     }
 
     #[test]
-    fn each_stub_importer_detect_returns_false() {
+    fn built_in_importer_names_match() {
         let reg = FormatRegistry::default_registry();
-        let p = Path::new("/tmp/fake");
         for name in &["yolo", "coco", "huggingface"] {
             let imp = reg.get_importer(name).expect("importer should exist");
-            assert!(!imp.detect(p), "{name} stub detect() must return false");
-        }
-    }
-
-    #[test]
-    fn importer_names_match() {
-        let reg = FormatRegistry::default_registry();
-        for name in &["yolo", "coco", "huggingface"] {
-            let imp = reg.get_importer(name).expect("should exist");
             assert_eq!(imp.name(), *name);
         }
     }
@@ -312,10 +242,10 @@ mod tests {
     #[test]
     fn can_register_custom_importer() {
         use super::FormatImporter;
+        use crate::Result;
         use crate::db::Database;
         use crate::storage::StorageManager;
         use crate::types::Dataset;
-        use crate::Result;
         use std::path::PathBuf;
 
         struct CustomImporter;
@@ -337,7 +267,7 @@ mod tests {
                     id: 0,
                     name: "custom".to_string(),
                     path: PathBuf::from("/tmp"),
-                    format: crate::types::DatasetFormat::Custom("custom".to_string()),
+                    format: crate::types::DatasetFormat::new("custom"),
                     schema_path: None,
                     created_at: "2026-01-01".to_string(),
                     updated_at: None,

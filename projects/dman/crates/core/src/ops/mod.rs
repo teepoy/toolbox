@@ -1,35 +1,17 @@
 pub mod transforms;
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use rusqlite::params;
 
 use crate::{
+    Dataset, DatasetFormat,
     db::Database,
     error::{DmanError, Result},
-    Dataset, DatasetFormat,
 };
-
-fn format_to_str(f: &DatasetFormat) -> String {
-    match f {
-        DatasetFormat::Yolo => "Yolo".to_string(),
-        DatasetFormat::Coco => "Coco".to_string(),
-        DatasetFormat::HuggingFace => "HuggingFace".to_string(),
-        DatasetFormat::Custom(s) => s.clone(),
-    }
-}
-
-fn format_from_str(s: &str) -> DatasetFormat {
-    match s {
-        "Yolo" => DatasetFormat::Yolo,
-        "Coco" => DatasetFormat::Coco,
-        "HuggingFace" => DatasetFormat::HuggingFace,
-        other => DatasetFormat::Custom(other.to_string()),
-    }
-}
 
 fn row_to_dataset(row: &rusqlite::Row<'_>) -> rusqlite::Result<Dataset> {
     let id: i64 = row.get(0)?;
@@ -41,7 +23,7 @@ fn row_to_dataset(row: &rusqlite::Row<'_>) -> rusqlite::Result<Dataset> {
     let updated_at: Option<String> = row.get(6)?;
     let metadata_str: Option<String> = row.get(7)?;
 
-    let format = format_from_str(&format_str);
+    let format = DatasetFormat::from(format_str);
     let schema_path = schema_path.map(PathBuf::from);
     let metadata = metadata_str
         .as_deref()
@@ -98,6 +80,142 @@ fn dataset_exists(db: &Database, name: &str) -> Result<bool> {
     Ok(count > 0)
 }
 
+struct RawSample {
+    id: i64,
+    name: String,
+    metadata: Option<String>,
+}
+
+struct RawAsset {
+    id: i64,
+    asset_type: String,
+    file_name: String,
+    file_path: String,
+    width: Option<i64>,
+    height: Option<i64>,
+    hash: Option<String>,
+    metadata: Option<String>,
+}
+
+struct RawAnnotation {
+    asset_id: Option<i64>,
+    category_id: Option<i64>,
+    bbox: Option<String>,
+    segmentation: Option<String>,
+    keypoints: Option<String>,
+    metadata: Option<String>,
+}
+
+fn fetch_samples(db: &Database, dataset_id: i64) -> Result<Vec<RawSample>> {
+    let mut stmt = db
+        .conn
+        .prepare("SELECT id, name, metadata FROM samples WHERE dataset_id = ?1 ORDER BY id")?;
+    let samples = stmt
+        .query_map(params![dataset_id], |row| {
+            Ok(RawSample {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                metadata: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(DmanError::Database)?;
+    Ok(samples)
+}
+
+fn fetch_assets(db: &Database, sample_id: i64) -> Result<Vec<RawAsset>> {
+    let mut stmt = db.conn.prepare(
+        "SELECT id, asset_type, file_name, file_path, width, height, hash, metadata FROM assets WHERE sample_id = ?1 ORDER BY id",
+    )?;
+    let assets = stmt
+        .query_map(params![sample_id], |row| {
+            Ok(RawAsset {
+                id: row.get(0)?,
+                asset_type: row.get(1)?,
+                file_name: row.get(2)?,
+                file_path: row.get(3)?,
+                width: row.get(4)?,
+                height: row.get(5)?,
+                hash: row.get(6)?,
+                metadata: row.get(7)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(DmanError::Database)?;
+    Ok(assets)
+}
+
+fn fetch_annotations(db: &Database, sample_id: i64) -> Result<Vec<RawAnnotation>> {
+    let mut stmt = db.conn.prepare(
+        "SELECT asset_id, category_id, bbox, segmentation, keypoints, metadata FROM annotations WHERE sample_id = ?1 ORDER BY id",
+    )?;
+    let anns = stmt
+        .query_map(params![sample_id], |row| {
+            Ok(RawAnnotation {
+                asset_id: row.get(0)?,
+                category_id: row.get(1)?,
+                bbox: row.get(2)?,
+                segmentation: row.get(3)?,
+                keypoints: row.get(4)?,
+                metadata: row.get(5)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(DmanError::Database)?;
+    Ok(anns)
+}
+
+/// Copy a sample (with its assets and annotations) into a new dataset.
+/// Returns the new sample_id.
+/// `asset_id_map` maps old asset_id -> new asset_id for FK maintenance.
+fn copy_sample(db: &Database, sample: &RawSample, new_dataset_id: i64) -> Result<i64> {
+    db.conn.execute(
+        "INSERT INTO samples (dataset_id, name, metadata) VALUES (?1, ?2, ?3)",
+        params![new_dataset_id, sample.name, sample.metadata],
+    )?;
+    let new_sample_id = db.conn.last_insert_rowid();
+
+    let assets = fetch_assets(db, sample.id)?;
+    let mut asset_id_map: HashMap<i64, i64> = HashMap::new();
+
+    for asset in &assets {
+        db.conn.execute(
+            "INSERT INTO assets (sample_id, asset_type, file_name, file_path, width, height, hash, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                new_sample_id,
+                asset.asset_type,
+                asset.file_name,
+                asset.file_path,
+                asset.width,
+                asset.height,
+                asset.hash,
+                asset.metadata
+            ],
+        )?;
+        let new_asset_id = db.conn.last_insert_rowid();
+        asset_id_map.insert(asset.id, new_asset_id);
+    }
+
+    let anns = fetch_annotations(db, sample.id)?;
+    for ann in &anns {
+        let new_asset_id = ann.asset_id.and_then(|aid| asset_id_map.get(&aid).copied());
+        db.conn.execute(
+            "INSERT INTO annotations (sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                new_sample_id,
+                new_asset_id,
+                ann.category_id,
+                ann.bbox,
+                ann.segmentation,
+                ann.keypoints,
+                ann.metadata
+            ],
+        )?;
+    }
+
+    Ok(new_sample_id)
+}
+
 /// Physical dataset operations: rename, duplicate, merge, split.
 pub struct DatasetOps;
 
@@ -141,7 +259,7 @@ impl DatasetOps {
     /// Duplicate a dataset.
     ///
     /// Creates a new dataset record with `new_name` (same format/path/metadata).
-    /// Copies all image records (same file_paths, reference-mode) and their annotations.
+    /// Copies all samples + assets (reference paths) and their annotations.
     /// Returns the new `Dataset`.
     pub fn duplicate(db: &Database, name: &str, new_name: &str) -> Result<Dataset> {
         let src = get_dataset_by_name(db, name)?;
@@ -153,7 +271,7 @@ impl DatasetOps {
         db.conn.execute("BEGIN IMMEDIATE", [])?;
 
         let result = (|| -> Result<i64> {
-            let format_str = format_to_str(&src.format);
+            let format_str = src.format.to_string();
             let path_str = src.path.to_string_lossy().to_string();
             let schema_str = src
                 .schema_path
@@ -171,74 +289,9 @@ impl DatasetOps {
             )?;
             let new_dataset_id = db.conn.last_insert_rowid();
 
-            // Get all images from source dataset
-            struct RawImage {
-                id: i64,
-                file_name: String,
-                file_path: String,
-                width: Option<i64>,
-                height: Option<i64>,
-                hash: Option<String>,
-                metadata: Option<String>,
-            }
-
-            let mut img_stmt = db.conn.prepare(
-                "SELECT id, file_name, file_path, width, height, hash, metadata FROM images WHERE dataset_id = ?1 ORDER BY id",
-            )?;
-
-            let images: Vec<RawImage> = img_stmt
-                .query_map(params![src.id], |row| {
-                    Ok(RawImage {
-                        id: row.get(0)?,
-                        file_name: row.get(1)?,
-                        file_path: row.get(2)?,
-                        width: row.get(3)?,
-                        height: row.get(4)?,
-                        hash: row.get(5)?,
-                        metadata: row.get(6)?,
-                    })
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(DmanError::Database)?;
-
-            // For each image, insert into new dataset and copy annotations
-            for img in &images {
-                db.conn.execute(
-                    "INSERT INTO images (dataset_id, file_name, file_path, width, height, hash, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    params![new_dataset_id, img.file_name, img.file_path, img.width, img.height, img.hash, img.metadata],
-                )?;
-                let new_image_id = db.conn.last_insert_rowid();
-
-                struct RawAnn {
-                    category_id: Option<i64>,
-                    bbox: Option<String>,
-                    segmentation: Option<String>,
-                    keypoints: Option<String>,
-                    metadata: Option<String>,
-                }
-
-                let mut ann_stmt = db.conn.prepare(
-                    "SELECT category_id, bbox, segmentation, keypoints, metadata FROM annotations WHERE image_id = ?1 ORDER BY id",
-                )?;
-                let anns: Vec<RawAnn> = ann_stmt
-                    .query_map(params![img.id], |row| {
-                        Ok(RawAnn {
-                            category_id: row.get(0)?,
-                            bbox: row.get(1)?,
-                            segmentation: row.get(2)?,
-                            keypoints: row.get(3)?,
-                            metadata: row.get(4)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()
-                    .map_err(DmanError::Database)?;
-
-                for ann in &anns {
-                    db.conn.execute(
-                        "INSERT INTO annotations (image_id, category_id, bbox, segmentation, keypoints, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                        params![new_image_id, ann.category_id, ann.bbox, ann.segmentation, ann.keypoints, ann.metadata],
-                    )?;
-                }
+            let samples = fetch_samples(db, src.id)?;
+            for sample in &samples {
+                copy_sample(db, sample, new_dataset_id)?;
             }
 
             Ok(new_dataset_id)
@@ -259,7 +312,7 @@ impl DatasetOps {
     /// Merge multiple datasets into a new output dataset.
     ///
     /// Creates a new dataset record with `output_name`.
-    /// For each source dataset, copies all images (reference paths) and their annotations.
+    /// For each source dataset, copies all samples (reference paths) and their annotations.
     /// Returns the new `Dataset`.
     pub fn merge(db: &Database, names: &[&str], output_name: &str) -> Result<Dataset> {
         if names.is_empty() {
@@ -280,7 +333,7 @@ impl DatasetOps {
 
         // Pick format from first source
         let first = &sources[0];
-        let format_str = format_to_str(&first.format);
+        let format_str = first.format.to_string();
         let path_str = first.path.to_string_lossy().to_string();
 
         db.conn.execute("BEGIN IMMEDIATE", [])?;
@@ -293,72 +346,9 @@ impl DatasetOps {
             let new_dataset_id = db.conn.last_insert_rowid();
 
             for src in &sources {
-                struct RawImage {
-                    id: i64,
-                    file_name: String,
-                    file_path: String,
-                    width: Option<i64>,
-                    height: Option<i64>,
-                    hash: Option<String>,
-                    metadata: Option<String>,
-                }
-
-                let mut img_stmt = db.conn.prepare(
-                    "SELECT id, file_name, file_path, width, height, hash, metadata FROM images WHERE dataset_id = ?1 ORDER BY id",
-                )?;
-
-                let images: Vec<RawImage> = img_stmt
-                    .query_map(params![src.id], |row| {
-                        Ok(RawImage {
-                            id: row.get(0)?,
-                            file_name: row.get(1)?,
-                            file_path: row.get(2)?,
-                            width: row.get(3)?,
-                            height: row.get(4)?,
-                            hash: row.get(5)?,
-                            metadata: row.get(6)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()
-                    .map_err(DmanError::Database)?;
-
-                for img in &images {
-                    db.conn.execute(
-                        "INSERT INTO images (dataset_id, file_name, file_path, width, height, hash, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                        params![new_dataset_id, img.file_name, img.file_path, img.width, img.height, img.hash, img.metadata],
-                    )?;
-                    let new_image_id = db.conn.last_insert_rowid();
-
-                    struct RawAnn {
-                        category_id: Option<i64>,
-                        bbox: Option<String>,
-                        segmentation: Option<String>,
-                        keypoints: Option<String>,
-                        metadata: Option<String>,
-                    }
-
-                    let mut ann_stmt = db.conn.prepare(
-                        "SELECT category_id, bbox, segmentation, keypoints, metadata FROM annotations WHERE image_id = ?1 ORDER BY id",
-                    )?;
-                    let anns: Vec<RawAnn> = ann_stmt
-                        .query_map(params![img.id], |row| {
-                            Ok(RawAnn {
-                                category_id: row.get(0)?,
-                                bbox: row.get(1)?,
-                                segmentation: row.get(2)?,
-                                keypoints: row.get(3)?,
-                                metadata: row.get(4)?,
-                            })
-                        })?
-                        .collect::<rusqlite::Result<Vec<_>>>()
-                        .map_err(DmanError::Database)?;
-
-                    for ann in &anns {
-                        db.conn.execute(
-                            "INSERT INTO annotations (image_id, category_id, bbox, segmentation, keypoints, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                            params![new_image_id, ann.category_id, ann.bbox, ann.segmentation, ann.keypoints, ann.metadata],
-                        )?;
-                    }
+                let samples = fetch_samples(db, src.id)?;
+                for sample in &samples {
+                    copy_sample(db, sample, new_dataset_id)?;
                 }
             }
 
@@ -380,8 +370,9 @@ impl DatasetOps {
     /// Split a dataset into multiple sub-datasets based on named ratios.
     ///
     /// `ratios` must sum to approximately 1.0 (within 0.01 tolerance).
-    /// Images are distributed deterministically using `hash(image_id XOR seed)`.
+    /// Samples are distributed deterministically using `hash(sample_id XOR seed)`.
     /// New datasets are named `"{name}_{split_name}"`.
+    /// All assets of a sample stay with that sample — never splits a sample's assets.
     /// Returns vec of new Datasets in ratio key-sorted order.
     pub fn split(
         db: &Database,
@@ -418,44 +409,17 @@ impl DatasetOps {
             }
         }
 
-        // Fetch all images
-        struct RawImage {
-            id: i64,
-            file_name: String,
-            file_path: String,
-            width: Option<i64>,
-            height: Option<i64>,
-            hash: Option<String>,
-            metadata: Option<String>,
-        }
+        // Fetch all samples
+        let mut samples = fetch_samples(db, src.id)?;
 
-        let mut img_stmt = db.conn.prepare(
-            "SELECT id, file_name, file_path, width, height, hash, metadata FROM images WHERE dataset_id = ?1 ORDER BY id",
-        )?;
-
-        let mut images: Vec<RawImage> = img_stmt
-            .query_map(params![src.id], |row| {
-                Ok(RawImage {
-                    id: row.get(0)?,
-                    file_name: row.get(1)?,
-                    file_path: row.get(2)?,
-                    width: row.get(3)?,
-                    height: row.get(4)?,
-                    hash: row.get(5)?,
-                    metadata: row.get(6)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(DmanError::Database)?;
-
-        // Sort images by deterministic hash
-        images.sort_by_key(|img| {
+        // Sort samples by deterministic hash
+        samples.sort_by_key(|s| {
             let mut hasher = DefaultHasher::new();
-            (img.id as u64 ^ seed).hash(&mut hasher);
+            (s.id as u64 ^ seed).hash(&mut hasher);
             hasher.finish()
         });
 
-        let n = images.len();
+        let n = samples.len();
 
         // Build cumulative thresholds
         let mut cumulative = Vec::with_capacity(ratio_vec.len());
@@ -465,9 +429,9 @@ impl DatasetOps {
             cumulative.push(cum);
         }
 
-        // Assign each image to a bucket
+        // Assign each sample to a bucket
         let mut buckets: Vec<Vec<usize>> = vec![Vec::new(); ratio_vec.len()];
-        for (i, _) in images.iter().enumerate() {
+        for (i, _) in samples.iter().enumerate() {
             let frac = if n > 0 {
                 (i as f64 + 0.5) / n as f64
             } else {
@@ -483,7 +447,7 @@ impl DatasetOps {
             buckets[assigned].push(i);
         }
 
-        let format_str = format_to_str(&src.format);
+        let format_str = src.format.to_string();
         let path_str = src.path.to_string_lossy().to_string();
 
         db.conn.execute("BEGIN IMMEDIATE", [])?;
@@ -501,45 +465,9 @@ impl DatasetOps {
                 let new_dataset_id = db.conn.last_insert_rowid();
                 new_ids.push(new_dataset_id);
 
-                for &img_idx in &buckets[bucket_idx] {
-                    let img = &images[img_idx];
-
-                    db.conn.execute(
-                        "INSERT INTO images (dataset_id, file_name, file_path, width, height, hash, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                        params![new_dataset_id, img.file_name, img.file_path, img.width, img.height, img.hash, img.metadata],
-                    )?;
-                    let new_image_id = db.conn.last_insert_rowid();
-
-                    struct RawAnn {
-                        category_id: Option<i64>,
-                        bbox: Option<String>,
-                        segmentation: Option<String>,
-                        keypoints: Option<String>,
-                        metadata: Option<String>,
-                    }
-
-                    let mut ann_stmt = db.conn.prepare(
-                        "SELECT category_id, bbox, segmentation, keypoints, metadata FROM annotations WHERE image_id = ?1 ORDER BY id",
-                    )?;
-                    let anns: Vec<RawAnn> = ann_stmt
-                        .query_map(params![img.id], |row| {
-                            Ok(RawAnn {
-                                category_id: row.get(0)?,
-                                bbox: row.get(1)?,
-                                segmentation: row.get(2)?,
-                                keypoints: row.get(3)?,
-                                metadata: row.get(4)?,
-                            })
-                        })?
-                        .collect::<rusqlite::Result<Vec<_>>>()
-                        .map_err(DmanError::Database)?;
-
-                    for ann in &anns {
-                        db.conn.execute(
-                            "INSERT INTO annotations (image_id, category_id, bbox, segmentation, keypoints, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                            params![new_image_id, ann.category_id, ann.bbox, ann.segmentation, ann.keypoints, ann.metadata],
-                        )?;
-                    }
+                for &sample_idx in &buckets[bucket_idx] {
+                    let sample = &samples[sample_idx];
+                    copy_sample(db, sample, new_dataset_id)?;
                 }
             }
 
@@ -583,30 +511,38 @@ mod tests {
         db.conn.last_insert_rowid()
     }
 
-    fn insert_image(db: &Database, dataset_id: i64, file_name: &str, file_path: &str) -> i64 {
+    /// Insert a sample and one default image asset. Returns the sample_id.
+    fn insert_sample(db: &Database, dataset_id: i64, file_name: &str, file_path: &str) -> i64 {
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                params![dataset_id, file_name, file_path],
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                params![dataset_id, file_name],
             )
-            .expect("insert image");
-        db.conn.last_insert_rowid()
+            .expect("insert sample");
+        let sample_id = db.conn.last_insert_rowid();
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, ?2, ?3, ?4)",
+                params![sample_id, "image", file_name, file_path],
+            )
+            .expect("insert asset");
+        sample_id
     }
 
-    fn insert_annotation(db: &Database, image_id: i64, category_id: Option<i64>) -> i64 {
+    fn insert_annotation(db: &Database, sample_id: i64, category_id: Option<i64>) -> i64 {
         db.conn
             .execute(
-                "INSERT INTO annotations (image_id, category_id) VALUES (?1, ?2)",
-                params![image_id, category_id],
+                "INSERT INTO annotations (sample_id, category_id) VALUES (?1, ?2)",
+                params![sample_id, category_id],
             )
             .expect("insert annotation");
         db.conn.last_insert_rowid()
     }
 
-    fn count_images(db: &Database, dataset_id: i64) -> i64 {
+    fn count_samples(db: &Database, dataset_id: i64) -> i64 {
         db.conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 params![dataset_id],
                 |r| r.get(0),
             )
@@ -614,11 +550,13 @@ mod tests {
     }
 
     fn count_annotations_for_dataset(db: &Database, dataset_id: i64) -> i64 {
-        db.conn.query_row(
-            "SELECT COUNT(*) FROM annotations WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
-            params![dataset_id],
-            |r| r.get(0),
-        ).unwrap()
+        db.conn
+            .query_row(
+                "SELECT COUNT(*) FROM annotations WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1)",
+                params![dataset_id],
+                |r| r.get(0),
+            )
+            .unwrap()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -675,23 +613,23 @@ mod tests {
         let db = in_memory_db();
         let src_id = insert_dataset(&db, "original", "/tmp/orig", "Coco");
 
-        // Add 3 images with annotations
-        let img1 = insert_image(&db, src_id, "a.jpg", "/data/a.jpg");
-        let img2 = insert_image(&db, src_id, "b.jpg", "/data/b.jpg");
-        let img3 = insert_image(&db, src_id, "c.jpg", "/data/c.jpg");
-        insert_annotation(&db, img1, Some(1));
-        insert_annotation(&db, img1, Some(2));
-        insert_annotation(&db, img2, Some(1));
-        insert_annotation(&db, img3, None);
+        // Add 3 samples with annotations
+        let s1 = insert_sample(&db, src_id, "a.jpg", "/data/a.jpg");
+        let s2 = insert_sample(&db, src_id, "b.jpg", "/data/b.jpg");
+        let s3 = insert_sample(&db, src_id, "c.jpg", "/data/c.jpg");
+        insert_annotation(&db, s1, Some(1));
+        insert_annotation(&db, s1, Some(2));
+        insert_annotation(&db, s2, Some(1));
+        insert_annotation(&db, s3, None);
 
         let new_ds = DatasetOps::duplicate(&db, "original", "copy").expect("duplicate");
 
         assert_eq!(new_ds.name, "copy");
         assert_ne!(new_ds.id, src_id);
 
-        // Both exist with same image count
-        assert_eq!(count_images(&db, src_id), 3);
-        assert_eq!(count_images(&db, new_ds.id), 3);
+        // Both exist with same sample count
+        assert_eq!(count_samples(&db, src_id), 3);
+        assert_eq!(count_samples(&db, new_ds.id), 3);
 
         // Annotations copied
         assert_eq!(count_annotations_for_dataset(&db, src_id), 4);
@@ -725,22 +663,22 @@ mod tests {
         let ds1 = insert_dataset(&db, "ds1", "/tmp/ds1", "Yolo");
         let ds2 = insert_dataset(&db, "ds2", "/tmp/ds2", "Yolo");
 
-        insert_image(&db, ds1, "a.jpg", "/data/a.jpg");
-        insert_image(&db, ds1, "b.jpg", "/data/b.jpg");
-        let img_c = insert_image(&db, ds2, "c.jpg", "/data/c.jpg");
-        insert_annotation(&db, img_c, Some(1));
+        insert_sample(&db, ds1, "a.jpg", "/data/a.jpg");
+        insert_sample(&db, ds1, "b.jpg", "/data/b.jpg");
+        let s_c = insert_sample(&db, ds2, "c.jpg", "/data/c.jpg");
+        insert_annotation(&db, s_c, Some(1));
 
         let merged = DatasetOps::merge(&db, &["ds1", "ds2"], "merged").expect("merge");
 
         assert_eq!(merged.name, "merged");
-        // Union of all images: 2 + 1 = 3
-        assert_eq!(count_images(&db, merged.id), 3);
+        // Union of all samples: 2 + 1 = 3
+        assert_eq!(count_samples(&db, merged.id), 3);
         // Union of annotations: 0 + 1 = 1
         assert_eq!(count_annotations_for_dataset(&db, merged.id), 1);
 
         // Source datasets untouched
-        assert_eq!(count_images(&db, ds1), 2);
-        assert_eq!(count_images(&db, ds2), 1);
+        assert_eq!(count_samples(&db, ds1), 2);
+        assert_eq!(count_samples(&db, ds2), 1);
     }
 
     #[test]
@@ -763,9 +701,9 @@ mod tests {
         let db = in_memory_db();
         let src_id = insert_dataset(&db, "full", "/tmp/full", "Yolo");
 
-        // Insert 100 images
+        // Insert 100 samples
         for i in 0..100_i64 {
-            insert_image(
+            insert_sample(
                 &db,
                 src_id,
                 &format!("img_{}.jpg", i),
@@ -780,12 +718,12 @@ mod tests {
         let splits = DatasetOps::split(&db, "full", ratios, 42).expect("split");
         assert_eq!(splits.len(), 2);
 
-        let total_split: i64 = splits.iter().map(|ds| count_images(&db, ds.id)).sum();
-        assert_eq!(total_split, 100, "all images should be assigned");
+        let total_split: i64 = splits.iter().map(|ds| count_samples(&db, ds.id)).sum();
+        assert_eq!(total_split, 100, "all samples should be assigned");
 
         // Check approximate ratios (within 5%)
         for ds in &splits {
-            let count = count_images(&db, ds.id);
+            let count = count_samples(&db, ds.id);
             let ratio = count as f64 / 100.0;
             let (split_name, expected_ratio) = if ds.name.ends_with("_train") {
                 ("train", 0.8)
@@ -830,7 +768,7 @@ mod tests {
         let src_id = insert_dataset(&db, "big", "/tmp/big", "Coco");
 
         for i in 0..100_i64 {
-            insert_image(&db, src_id, &format!("{}.jpg", i), &format!("/d/{}.jpg", i));
+            insert_sample(&db, src_id, &format!("{}.jpg", i), &format!("/d/{}.jpg", i));
         }
 
         let mut ratios = HashMap::new();
@@ -841,7 +779,7 @@ mod tests {
         let splits = DatasetOps::split(&db, "big", ratios, 123).expect("split3");
         assert_eq!(splits.len(), 3);
 
-        let total: i64 = splits.iter().map(|ds| count_images(&db, ds.id)).sum();
+        let total: i64 = splits.iter().map(|ds| count_samples(&db, ds.id)).sum();
         assert_eq!(total, 100);
     }
 }

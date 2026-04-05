@@ -1,30 +1,45 @@
 #[cfg(feature = "python")]
-pub use python_impl::{create_dataset, update_dataset, DmanDatasetBuilder, DmanDatasetUpdater};
+pub use python_impl::{DmanDatasetBuilder, DmanDatasetUpdater, create_dataset, update_dataset};
 
 #[cfg(feature = "python")]
 pub mod python_impl {
+    use std::str::FromStr;
+
     use dman_core::{
-        catalog::Catalog, dataset::DatasetService, db::Database, types::DatasetFormat,
+        catalog::Catalog,
+        dataset::DatasetService,
+        db::Database,
+        types::{AssetType, BBox, DatasetFormat},
     };
     use pyo3::prelude::*;
     use pyo3::types::PyDict;
     use rusqlite::params;
-    use serde_json::json;
 
     use crate::sdk::loader::DmanDataset;
 
     #[derive(Debug, Clone)]
-    pub(crate) struct PendingImage {
-        pub path: String,
-        pub metadata: Option<String>,
+    pub(crate) struct PendingAsset {
+        pub asset_type: String,
+        pub file_name: String,
+        pub file_path: String,
+        pub width: Option<i64>,
+        pub height: Option<i64>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub(crate) struct PendingSample {
+        pub name: String,
+        pub assets: Vec<PendingAsset>,
     }
 
     #[derive(Debug, Clone)]
     pub(crate) struct PendingAnnotation {
-        pub image_index: usize,
+        pub sample_name: String,
+        pub asset_name: Option<String>,
         pub category: String,
-        pub bbox: Vec<f64>,
-        pub metadata: Option<String>,
+        pub bbox: Option<Vec<f64>>,
+        pub segmentation: Option<Vec<Vec<f64>>>,
+        pub keypoints: Option<Vec<f64>>,
     }
 
     #[derive(Debug, Clone)]
@@ -35,18 +50,25 @@ pub mod python_impl {
 
     #[derive(Debug)]
     pub(crate) enum UpdateOp {
-        AddImage {
-            path: String,
-            metadata: Option<String>,
+        AddSample {
+            name: String,
+        },
+        AddAsset {
+            sample_name: String,
+            asset_type: String,
+            file_path: String,
+            width: Option<i64>,
+            height: Option<i64>,
         },
         AddAnnotation {
-            image_db_id: i64,
+            sample_db_id: i64,
+            asset_db_id: Option<i64>,
             category: String,
-            bbox: Vec<f64>,
+            bbox: Option<Vec<f64>>,
             metadata: Option<String>,
         },
-        RemoveImage {
-            image_db_id: i64,
+        RemoveSample {
+            sample_db_id: i64,
         },
     }
 
@@ -54,8 +76,7 @@ pub mod python_impl {
     pub struct DmanDatasetBuilder {
         pub(crate) db: Database,
         pub(crate) name: String,
-        pub(crate) schema_path: Option<String>,
-        pub(crate) pending_images: Vec<PendingImage>,
+        pub(crate) pending_samples: Vec<PendingSample>,
         pub(crate) pending_annotations: Vec<PendingAnnotation>,
         pub(crate) pending_categories: Vec<PendingCategory>,
     }
@@ -63,25 +84,72 @@ pub mod python_impl {
     impl DmanDatasetBuilder {
         pub fn new(name: &str, schema_path: Option<String>) -> PyResult<Self> {
             let db = open_catalog_db()?;
+            let _ = schema_path;
             Ok(Self {
                 db,
                 name: name.to_string(),
-                schema_path,
-                pending_images: Vec::new(),
+                pending_samples: Vec::new(),
                 pending_annotations: Vec::new(),
                 pending_categories: Vec::new(),
             })
         }
 
         pub fn new_with_db(db: Database, name: &str, schema_path: Option<String>) -> Self {
+            let _ = schema_path;
             Self {
                 db,
                 name: name.to_string(),
-                schema_path,
-                pending_images: Vec::new(),
+                pending_samples: Vec::new(),
                 pending_annotations: Vec::new(),
                 pending_categories: Vec::new(),
             }
+        }
+
+        pub fn add_sample_internal(
+            &mut self,
+            name: &str,
+            _metadata: Option<String>,
+        ) -> PyResult<usize> {
+            let idx = self.pending_samples.len();
+            self.pending_samples.push(PendingSample {
+                name: name.to_string(),
+                assets: Vec::new(),
+            });
+            Ok(idx)
+        }
+
+        pub fn add_asset_internal(
+            &mut self,
+            sample_name: &str,
+            asset_type: &str,
+            file_path: &str,
+            width: Option<i64>,
+            height: Option<i64>,
+            _metadata: Option<String>,
+        ) -> PyResult<()> {
+            let sample = self
+                .pending_samples
+                .iter_mut()
+                .find(|s| s.name == sample_name)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "no pending sample named '{sample_name}'"
+                    ))
+                })?;
+
+            let file_name = std::path::Path::new(file_path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| file_path.to_string());
+
+            sample.assets.push(PendingAsset {
+                asset_type: asset_type.to_string(),
+                file_name,
+                file_path: file_path.to_string(),
+                width,
+                height,
+            });
+            Ok(())
         }
 
         pub fn add_image_internal(
@@ -89,39 +157,45 @@ pub mod python_impl {
             path: &str,
             metadata: Option<String>,
         ) -> PyResult<usize> {
-            let idx = self.pending_images.len();
-            self.pending_images.push(PendingImage {
-                path: path.to_string(),
-                metadata,
-            });
+            let file_name = std::path::Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_string());
+            let sample_name = file_name.clone();
+            let idx = self.add_sample_internal(&sample_name, None)?;
+            self.add_asset_internal(&sample_name, "image", path, None, None, metadata)?;
             Ok(idx)
         }
 
         pub fn add_annotation_internal(
             &mut self,
-            image_index: usize,
+            sample_name: &str,
             category: &str,
-            bbox: Vec<f64>,
-            metadata: Option<String>,
+            bbox: Option<Vec<f64>>,
+            segmentation: Option<Vec<Vec<f64>>>,
+            keypoints: Option<Vec<f64>>,
+            asset_name: Option<String>,
         ) -> PyResult<()> {
-            if image_index >= self.pending_images.len() {
+            if !self.pending_samples.iter().any(|s| s.name == sample_name) {
                 return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "image_index {} out of range (have {} pending images)",
-                    image_index,
-                    self.pending_images.len()
+                    "no pending sample named '{sample_name}'"
                 )));
             }
-            if bbox.len() != 4 {
+            if let Some(ref b) = bbox
+                && b.len() != 4
+            {
                 return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "bbox must have 4 elements [x, y, w, h], got {}",
-                    bbox.len()
+                    "bbox must have 4 elements [x, y, width, height], got {}",
+                    b.len()
                 )));
             }
             self.pending_annotations.push(PendingAnnotation {
-                image_index,
+                sample_name: sample_name.to_string(),
+                asset_name,
                 category: category.to_string(),
                 bbox,
-                metadata,
+                segmentation,
+                keypoints,
             });
             Ok(())
         }
@@ -157,7 +231,7 @@ pub mod python_impl {
                 &self.db,
                 &self.name,
                 dataset_path,
-                DatasetFormat::Custom("builder".to_string()),
+                DatasetFormat::builder(),
             )
             .map_err(|e| {
                 pyo3::exceptions::PyRuntimeError::new_err(format!("register dataset: {e}"))
@@ -222,49 +296,87 @@ pub mod python_impl {
                 }
             }
 
-            let mut image_db_ids: Vec<i64> = Vec::with_capacity(self.pending_images.len());
-            for pi in &self.pending_images {
-                let file_name = std::path::Path::new(&pi.path)
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| pi.path.clone());
+            let mut sample_id_map: std::collections::HashMap<String, i64> =
+                std::collections::HashMap::new();
+            let mut asset_id_map: std::collections::HashMap<(String, String), i64> =
+                std::collections::HashMap::new();
 
-                self.db
-                    .conn
-                    .execute(
-                        "INSERT INTO images (dataset_id, file_name, file_path, metadata) \
-                         VALUES (?1, ?2, ?3, ?4)",
-                        params![dataset_id, file_name, pi.path, pi.metadata],
+            for ps in &self.pending_samples {
+                let sample_id = DatasetService::add_sample(&self.db, dataset_id, &ps.name, None)
+                    .map_err(|e| {
+                        pyo3::exceptions::PyRuntimeError::new_err(format!("insert sample: {e}"))
+                    })?;
+                sample_id_map.insert(ps.name.clone(), sample_id);
+
+                for pa in &ps.assets {
+                    let asset_type =
+                        AssetType::from_str(&pa.asset_type).unwrap_or(AssetType::Image);
+                    let asset_id = DatasetService::add_asset(
+                        &self.db,
+                        sample_id,
+                        asset_type,
+                        &pa.file_name,
+                        std::path::Path::new(&pa.file_path),
+                        pa.width.map(|w| w as u32),
+                        pa.height.map(|h| h as u32),
+                        None,
+                        None,
                     )
                     .map_err(|e| {
-                        pyo3::exceptions::PyRuntimeError::new_err(format!("insert image: {e}"))
+                        pyo3::exceptions::PyRuntimeError::new_err(format!("insert asset: {e}"))
                     })?;
-                image_db_ids.push(self.db.conn.last_insert_rowid());
+                    asset_id_map.insert((ps.name.clone(), pa.file_name.clone()), asset_id);
+                }
             }
 
             for ann in &self.pending_annotations {
-                let image_db_id = image_db_ids[ann.image_index];
-                let category_id = category_map.get(&ann.category).copied();
-                let bbox_json = serde_json::to_string(&json!({
-                    "x": ann.bbox[0],
-                    "y": ann.bbox[1],
-                    "w": ann.bbox[2],
-                    "h": ann.bbox[3]
-                }))
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("serialize bbox: {e}"))
+                let sample_id = *sample_id_map.get(&ann.sample_name).ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "annotation references unknown sample '{}'",
+                        ann.sample_name
+                    ))
                 })?;
 
-                self.db
-                    .conn
-                    .execute(
-                        "INSERT INTO annotations (image_id, category_id, bbox, metadata) \
-                         VALUES (?1, ?2, ?3, ?4)",
-                        params![image_db_id, category_id, bbox_json, ann.metadata],
-                    )
-                    .map_err(|e| {
-                        pyo3::exceptions::PyRuntimeError::new_err(format!("insert annotation: {e}"))
-                    })?;
+                let asset_id: Option<i64> = if let Some(ref asset_name) = ann.asset_name {
+                    asset_id_map
+                        .get(&(ann.sample_name.clone(), asset_name.clone()))
+                        .copied()
+                } else {
+                    let sample = self
+                        .pending_samples
+                        .iter()
+                        .find(|s| s.name == ann.sample_name);
+                    sample.and_then(|s| {
+                        s.assets.first().and_then(|a| {
+                            asset_id_map
+                                .get(&(ann.sample_name.clone(), a.file_name.clone()))
+                                .copied()
+                        })
+                    })
+                };
+
+                let category_id = category_map.get(&ann.category).copied();
+
+                let bbox: Option<BBox> = ann.bbox.as_ref().map(|b| BBox {
+                    x: b[0],
+                    y: b[1],
+                    width: b[2],
+                    height: b[3],
+                });
+
+                DatasetService::add_annotation(
+                    &self.db,
+                    sample_id,
+                    asset_id,
+                    category_id,
+                    bbox.as_ref(),
+                    ann.segmentation.as_ref(),
+                    ann.keypoints.as_ref(),
+                    None,
+                )
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("insert annotation: {e}"))
+                })?;
             }
 
             DmanDataset::from_name_with_db(&self.db, &self.name)
@@ -273,6 +385,51 @@ pub mod python_impl {
 
     #[pymethods]
     impl DmanDatasetBuilder {
+        #[pyo3(signature = (name, metadata=None))]
+        pub fn add_sample(
+            &mut self,
+            name: String,
+            metadata: Option<Bound<'_, PyDict>>,
+        ) -> PyResult<usize> {
+            let meta_json = metadata
+                .map(|d| -> PyResult<String> {
+                    d.py()
+                        .import("json")
+                        .and_then(|j| j.call_method1("dumps", (d.as_any(),)))
+                        .and_then(|r| r.extract::<String>())
+                })
+                .transpose()?;
+            self.add_sample_internal(&name, meta_json)
+        }
+
+        #[pyo3(signature = (sample_name, asset_type, file_path, width=None, height=None, metadata=None))]
+        pub fn add_asset(
+            &mut self,
+            sample_name: String,
+            asset_type: String,
+            file_path: String,
+            width: Option<i64>,
+            height: Option<i64>,
+            metadata: Option<Bound<'_, PyDict>>,
+        ) -> PyResult<()> {
+            let meta_json = metadata
+                .map(|d| -> PyResult<String> {
+                    d.py()
+                        .import("json")
+                        .and_then(|j| j.call_method1("dumps", (d.as_any(),)))
+                        .and_then(|r| r.extract::<String>())
+                })
+                .transpose()?;
+            self.add_asset_internal(
+                &sample_name,
+                &asset_type,
+                &file_path,
+                width,
+                height,
+                meta_json,
+            )
+        }
+
         #[pyo3(signature = (path, metadata=None))]
         pub fn add_image(
             &mut self,
@@ -280,24 +437,45 @@ pub mod python_impl {
             metadata: Option<Bound<'_, PyDict>>,
         ) -> PyResult<i64> {
             let meta_json = metadata
-                .map(|d| Ok::<String, PyErr>(d.to_string()))
+                .map(|d| -> PyResult<String> {
+                    d.py()
+                        .import("json")
+                        .and_then(|j| j.call_method1("dumps", (d.as_any(),)))
+                        .and_then(|r| r.extract::<String>())
+                })
                 .transpose()?;
             let idx = self.add_image_internal(&path, meta_json)?;
             Ok(idx as i64)
         }
 
-        #[pyo3(signature = (image_id, category, bbox, metadata=None))]
+        #[pyo3(signature = (sample_name, category, bbox=None, segmentation=None, keypoints=None, metadata=None, asset_name=None))]
+        #[allow(clippy::too_many_arguments)]
         pub fn add_annotation(
             &mut self,
-            image_id: i64,
+            sample_name: String,
             category: String,
-            bbox: Vec<f64>,
+            bbox: Option<Vec<f64>>,
+            segmentation: Option<Vec<Vec<f64>>>,
+            keypoints: Option<Vec<f64>>,
             metadata: Option<Bound<'_, PyDict>>,
+            asset_name: Option<String>,
         ) -> PyResult<()> {
-            let meta_json = metadata
-                .map(|d| Ok::<String, PyErr>(d.to_string()))
+            let _meta_json = metadata
+                .map(|d| -> PyResult<String> {
+                    d.py()
+                        .import("json")
+                        .and_then(|j| j.call_method1("dumps", (d.as_any(),)))
+                        .and_then(|r| r.extract::<String>())
+                })
                 .transpose()?;
-            self.add_annotation_internal(image_id as usize, &category, bbox, meta_json)
+            self.add_annotation_internal(
+                &sample_name,
+                &category,
+                bbox,
+                segmentation,
+                keypoints,
+                asset_name,
+            )
         }
 
         #[pyo3(signature = (name, supercategory=None))]
@@ -322,7 +500,6 @@ pub mod python_impl {
     pub struct DmanDatasetUpdater {
         pub(crate) db: Database,
         pub(crate) dataset_id: i64,
-        pub(crate) dataset_name: String,
         pub(crate) pending_ops: Vec<UpdateOp>,
     }
 
@@ -339,32 +516,45 @@ pub mod python_impl {
             Ok(Self {
                 db,
                 dataset_id: ds.id,
-                dataset_name: name.to_string(),
                 pending_ops: Vec::new(),
+            })
+        }
+
+        pub fn add_sample_internal(
+            &mut self,
+            name: &str,
+            _metadata: Option<String>,
+        ) -> PyResult<i64> {
+            DatasetService::add_sample(&self.db, self.dataset_id, name, None).map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("add_sample insert: {e}"))
             })
         }
 
         pub fn add_image_internal(
             &mut self,
+            sample_id: i64,
             path: &str,
-            metadata: Option<String>,
+            _metadata: Option<String>,
         ) -> PyResult<i64> {
             let file_name = std::path::Path::new(path)
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| path.to_string());
 
-            self.db
-                .conn
-                .execute(
-                    "INSERT INTO images (dataset_id, file_name, file_path, metadata) \
-                     VALUES (?1, ?2, ?3, ?4)",
-                    params![self.dataset_id, file_name, path, metadata],
-                )
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("add_image insert: {e}"))
-                })?;
-            Ok(self.db.conn.last_insert_rowid())
+            DatasetService::add_asset(
+                &self.db,
+                sample_id,
+                AssetType::Image,
+                &file_name,
+                std::path::Path::new(path),
+                None,
+                None,
+                None,
+                None,
+            )
+            .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("add_image insert: {e}"))
+            })
         }
 
         pub fn apply_internal(&mut self) -> PyResult<()> {
@@ -393,110 +583,133 @@ pub mod python_impl {
                 std::collections::HashMap::new();
 
             for op in &self.pending_ops {
-                if let UpdateOp::AddAnnotation { category, .. } = op {
-                    if !category_map.contains_key(category) {
-                        self.db
-                            .conn
-                            .execute(
-                                "INSERT OR IGNORE INTO categories (dataset_id, name) \
-                                 VALUES (?1, ?2)",
-                                params![self.dataset_id, category],
-                            )
-                            .map_err(|e| {
-                                pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                    "insert category: {e}"
-                                ))
-                            })?;
-                        let cat_id: i64 = self
-                            .db
-                            .conn
-                            .query_row(
-                                "SELECT id FROM categories WHERE dataset_id = ?1 AND name = ?2",
-                                params![self.dataset_id, category],
-                                |r| r.get(0),
-                            )
-                            .map_err(|e| {
-                                pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                    "get category id: {e}"
-                                ))
-                            })?;
-                        category_map.insert(category.clone(), cat_id);
-                    }
+                if let UpdateOp::AddAnnotation { category, .. } = op
+                    && !category_map.contains_key(category)
+                {
+                    self.db
+                        .conn
+                        .execute(
+                            "INSERT OR IGNORE INTO categories (dataset_id, name) \
+                             VALUES (?1, ?2)",
+                            params![self.dataset_id, category],
+                        )
+                        .map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "insert category: {e}"
+                            ))
+                        })?;
+                    let cat_id: i64 = self
+                        .db
+                        .conn
+                        .query_row(
+                            "SELECT id FROM categories WHERE dataset_id = ?1 AND name = ?2",
+                            params![self.dataset_id, category],
+                            |r| r.get(0),
+                        )
+                        .map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "get category id: {e}"
+                            ))
+                        })?;
+                    category_map.insert(category.clone(), cat_id);
                 }
             }
 
             for op in &self.pending_ops {
                 match op {
-                    UpdateOp::AddImage { path, metadata } => {
-                        let file_name = std::path::Path::new(path)
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| path.clone());
-                        self.db
+                    UpdateOp::AddSample { name } => {
+                        DatasetService::add_sample(&self.db, self.dataset_id, name, None).map_err(
+                            |e| {
+                                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                    "add sample: {e}"
+                                ))
+                            },
+                        )?;
+                    }
+                    UpdateOp::AddAsset {
+                        sample_name,
+                        asset_type,
+                        file_path,
+                        width,
+                        height,
+                    } => {
+                        let sample_id: i64 = self
+                            .db
                             .conn
-                            .execute(
-                                "INSERT INTO images (dataset_id, file_name, file_path, metadata) \
-                                 VALUES (?1, ?2, ?3, ?4)",
-                                params![self.dataset_id, file_name, path, metadata],
+                            .query_row(
+                                "SELECT id FROM samples WHERE dataset_id = ?1 AND name = ?2",
+                                params![self.dataset_id, sample_name],
+                                |r| r.get(0),
                             )
                             .map_err(|e| {
-                                pyo3::exceptions::PyRuntimeError::new_err(format!("add image: {e}"))
+                                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                    "resolve sample '{sample_name}': {e}"
+                                ))
                             })?;
+
+                        let file_name = std::path::Path::new(file_path.as_str())
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| file_path.clone());
+
+                        let asset_type_val =
+                            AssetType::from_str(asset_type).unwrap_or(AssetType::Image);
+
+                        DatasetService::add_asset(
+                            &self.db,
+                            sample_id,
+                            asset_type_val,
+                            &file_name,
+                            std::path::Path::new(file_path.as_str()),
+                            width.map(|w| w as u32),
+                            height.map(|h| h as u32),
+                            None,
+                            None,
+                        )
+                        .map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!("add asset: {e}"))
+                        })?;
                     }
                     UpdateOp::AddAnnotation {
-                        image_db_id,
+                        sample_db_id,
+                        asset_db_id,
                         category,
                         bbox,
                         metadata,
                     } => {
                         let category_id = category_map.get(category).copied();
-                        let bbox_json = serde_json::to_string(&json!({
-                            "x": bbox[0],
-                            "y": bbox[1],
-                            "w": bbox[2],
-                            "h": bbox[3]
-                        }))
+
+                        let bbox_val: Option<BBox> = bbox.as_ref().map(|b| BBox {
+                            x: b[0],
+                            y: b[1],
+                            width: b[2],
+                            height: b[3],
+                        });
+
+                        let meta_val: Option<serde_json::Value> = metadata
+                            .as_deref()
+                            .and_then(|s| serde_json::from_str(s).ok());
+
+                        DatasetService::add_annotation(
+                            &self.db,
+                            *sample_db_id,
+                            *asset_db_id,
+                            category_id,
+                            bbox_val.as_ref(),
+                            None,
+                            None,
+                            meta_val.as_ref(),
+                        )
                         .map_err(|e| {
                             pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                "serialize bbox: {e}"
+                                "add annotation: {e}"
                             ))
                         })?;
-                        self.db
-                            .conn
-                            .execute(
-                                "INSERT INTO annotations (image_id, category_id, bbox, metadata) \
-                                 VALUES (?1, ?2, ?3, ?4)",
-                                params![image_db_id, category_id, bbox_json, metadata],
-                            )
-                            .map_err(|e| {
-                                pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                    "add annotation: {e}"
-                                ))
-                            })?;
                     }
-                    UpdateOp::RemoveImage { image_db_id } => {
-                        self.db
-                            .conn
-                            .execute(
-                                "DELETE FROM annotations WHERE image_id = ?1",
-                                params![image_db_id],
-                            )
-                            .map_err(|e| {
-                                pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                    "delete annotations: {e}"
-                                ))
-                            })?;
-                        self.db
-                            .conn
-                            .execute(
-                                "DELETE FROM images WHERE id = ?1 AND dataset_id = ?2",
-                                params![image_db_id, self.dataset_id],
-                            )
-                            .map_err(|e| {
-                                pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                    "delete image: {e}"
-                                ))
-                            })?;
+                    UpdateOp::RemoveSample { sample_db_id } => {
+                        DatasetService::remove_sample(&self.db, *sample_db_id).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!("remove sample: {e}"))
+                        })?;
                     }
                 }
             }
@@ -506,41 +719,80 @@ pub mod python_impl {
 
     #[pymethods]
     impl DmanDatasetUpdater {
-        #[pyo3(signature = (path, metadata=None))]
-        pub fn add_image(
+        #[pyo3(signature = (name, metadata=None))]
+        pub fn add_sample(
             &mut self,
-            path: String,
-            metadata: Option<Bound<'_, PyDict>>,
-        ) -> PyResult<i64> {
-            let meta_json = metadata
-                .map(|d| Ok::<String, PyErr>(d.to_string()))
-                .transpose()?;
-            self.pending_ops.push(UpdateOp::AddImage {
-                path,
-                metadata: meta_json,
-            });
-            Ok(-1)
-        }
-
-        #[pyo3(signature = (image_id, category, bbox, metadata=None))]
-        pub fn add_annotation(
-            &mut self,
-            image_id: i64,
-            category: String,
-            bbox: Vec<f64>,
+            name: String,
             metadata: Option<Bound<'_, PyDict>>,
         ) -> PyResult<()> {
-            if bbox.len() != 4 {
+            let _meta_json = metadata
+                .map(|d| -> PyResult<String> {
+                    d.py()
+                        .import("json")
+                        .and_then(|j| j.call_method1("dumps", (d.as_any(),)))
+                        .and_then(|r| r.extract::<String>())
+                })
+                .transpose()?;
+            self.pending_ops.push(UpdateOp::AddSample { name });
+            Ok(())
+        }
+
+        #[pyo3(signature = (sample_name, asset_type, file_path, width=None, height=None, metadata=None))]
+        pub fn add_asset(
+            &mut self,
+            sample_name: String,
+            asset_type: String,
+            file_path: String,
+            width: Option<i64>,
+            height: Option<i64>,
+            metadata: Option<Bound<'_, PyDict>>,
+        ) -> PyResult<()> {
+            let _meta_json = metadata
+                .map(|d| -> PyResult<String> {
+                    d.py()
+                        .import("json")
+                        .and_then(|j| j.call_method1("dumps", (d.as_any(),)))
+                        .and_then(|r| r.extract::<String>())
+                })
+                .transpose()?;
+            self.pending_ops.push(UpdateOp::AddAsset {
+                sample_name,
+                asset_type,
+                file_path,
+                width,
+                height,
+            });
+            Ok(())
+        }
+
+        #[pyo3(signature = (sample_id, category, bbox=None, asset_id=None, metadata=None))]
+        pub fn add_annotation(
+            &mut self,
+            sample_id: i64,
+            category: String,
+            bbox: Option<Vec<f64>>,
+            asset_id: Option<i64>,
+            metadata: Option<Bound<'_, PyDict>>,
+        ) -> PyResult<()> {
+            if let Some(ref b) = bbox
+                && b.len() != 4
+            {
                 return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "bbox must have 4 elements [x, y, w, h], got {}",
-                    bbox.len()
+                    "bbox must have 4 elements [x, y, width, height], got {}",
+                    b.len()
                 )));
             }
             let meta_json = metadata
-                .map(|d| Ok::<String, PyErr>(d.to_string()))
+                .map(|d| -> PyResult<String> {
+                    d.py()
+                        .import("json")
+                        .and_then(|j| j.call_method1("dumps", (d.as_any(),)))
+                        .and_then(|r| r.extract::<String>())
+                })
                 .transpose()?;
             self.pending_ops.push(UpdateOp::AddAnnotation {
-                image_db_id: image_id,
+                sample_db_id: sample_id,
+                asset_db_id: asset_id,
                 category,
                 bbox,
                 metadata: meta_json,
@@ -548,9 +800,9 @@ pub mod python_impl {
             Ok(())
         }
 
-        pub fn remove_image(&mut self, image_id: i64) -> PyResult<()> {
-            self.pending_ops.push(UpdateOp::RemoveImage {
-                image_db_id: image_id,
+        pub fn remove_sample(&mut self, sample_id: i64) -> PyResult<()> {
+            self.pending_ops.push(UpdateOp::RemoveSample {
+                sample_db_id: sample_id,
             });
             Ok(())
         }
@@ -600,21 +852,41 @@ mod tests {
     }
 
     #[test]
-    fn builder_creates_dataset_and_returns_dman_dataset() {
+    fn builder_creates_dataset_and_inserts_samples() {
         let tmp = TempDir::new().expect("tempdir");
         let db = in_memory_db();
         let mut builder = DmanDatasetBuilder::new_with_db(db, "test-builder", None);
 
-        let img_id = builder
+        builder
             .add_image_internal(tmp.path().join("img.jpg").to_str().unwrap(), None)
             .expect("add image");
         builder
-            .add_annotation_internal(img_id, "cat", vec![10.0, 20.0, 50.0, 50.0], None)
+            .add_annotation_internal(
+                "img.jpg",
+                "cat",
+                Some(vec![10.0, 20.0, 50.0, 50.0]),
+                None,
+                None,
+                None,
+            )
             .expect("add annotation");
 
         let ds = builder.build_internal().expect("build");
-        assert_eq!(ds.images.len(), 1);
         assert_eq!(ds.name, "test-builder");
+
+        let sample_count: i64 = builder
+            .db
+            .conn
+            .query_row("SELECT COUNT(*) FROM samples", [], |r| r.get(0))
+            .expect("count samples");
+        assert_eq!(sample_count, 1);
+
+        let asset_count: i64 = builder
+            .db
+            .conn
+            .query_row("SELECT COUNT(*) FROM assets", [], |r| r.get(0))
+            .expect("count assets");
+        assert_eq!(asset_count, 1);
     }
 
     #[test]
@@ -646,48 +918,56 @@ mod tests {
         let tmp = TempDir::new().expect("tempdir");
         let db = in_memory_db();
 
-        DatasetService::register(
-            &db,
-            "dup-ds",
-            tmp.path(),
-            DatasetFormat::Custom("x".to_string()),
-        )
-        .expect("pre-register");
+        DatasetService::register(&db, "dup-ds", tmp.path(), DatasetFormat::new("x"))
+            .expect("pre-register");
 
         let mut builder = DmanDatasetBuilder::new_with_db(db, "dup-ds", None);
-        let _ = builder
+        builder
             .add_image_internal(tmp.path().join("z.jpg").to_str().unwrap(), None)
             .expect("add");
 
         let result = builder.build_internal();
         assert!(result.is_err(), "expected error on duplicate dataset name");
 
-        let img_count: i64 = builder
+        let sample_count: i64 = builder
             .db
             .conn
-            .query_row("SELECT COUNT(*) FROM images", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM samples", [], |r| r.get(0))
             .expect("count");
-        assert_eq!(img_count, 0, "rollback must leave no images");
+        assert_eq!(sample_count, 0, "rollback must leave no samples");
     }
 
     #[test]
-    fn builder_multiple_images_and_annotations() {
+    fn builder_multiple_samples_and_annotations() {
         let tmp = TempDir::new().expect("tempdir");
         let db = in_memory_db();
         let mut builder = DmanDatasetBuilder::new_with_db(db, "multi-ds", None);
 
         for i in 0..3 {
             let img_path = tmp.path().join(format!("img{}.jpg", i));
-            let idx = builder
-                .add_image_internal(img_path.to_str().unwrap(), None)
-                .expect("add");
+            let img_str = img_path.to_str().unwrap();
+            builder.add_image_internal(img_str, None).expect("add");
+            let img_name = format!("img{}.jpg", i);
             builder
-                .add_annotation_internal(idx, "obj", vec![0.0, 0.0, 10.0, 10.0], None)
+                .add_annotation_internal(
+                    &img_name,
+                    "obj",
+                    Some(vec![0.0, 0.0, 10.0, 10.0]),
+                    None,
+                    None,
+                    None,
+                )
                 .expect("ann");
         }
 
-        let ds = builder.build_internal().expect("build");
-        assert_eq!(ds.images.len(), 3);
+        builder.build_internal().expect("build");
+
+        let sample_count: i64 = builder
+            .db
+            .conn
+            .query_row("SELECT COUNT(*) FROM samples", [], |r| r.get(0))
+            .expect("count samples");
+        assert_eq!(sample_count, 3);
     }
 
     #[test]
@@ -695,8 +975,14 @@ mod tests {
         let db = in_memory_db();
         let mut builder = DmanDatasetBuilder::new_with_db(db, "empty-builder-ds", None);
         let ds = builder.build_internal().expect("build empty");
-        assert_eq!(ds.images.len(), 0);
         assert_eq!(ds.name, "empty-builder-ds");
+
+        let sample_count: i64 = builder
+            .db
+            .conn
+            .query_row("SELECT COUNT(*) FROM samples", [], |r| r.get(0))
+            .expect("count");
+        assert_eq!(sample_count, 0);
     }
 
     #[test]
@@ -707,68 +993,67 @@ mod tests {
     }
 
     #[test]
-    fn updater_add_image_internal_returns_positive_id() {
+    fn updater_add_sample_internal_returns_positive_id() {
         let tmp = TempDir::new().expect("tempdir");
         let db = in_memory_db();
 
-        DatasetService::register(&db, "updater-ds", tmp.path(), DatasetFormat::Coco)
+        DatasetService::register(&db, "updater-ds", tmp.path(), DatasetFormat::coco())
             .expect("register");
 
         let mut updater = DmanDatasetUpdater::new_with_db(db, "updater-ds").expect("updater");
-        let img_id = updater
-            .add_image_internal(tmp.path().join("new.jpg").to_str().unwrap(), None)
-            .expect("add image");
-        assert!(img_id > 0);
+        let sample_id = updater
+            .add_sample_internal("new-sample", None)
+            .expect("add sample");
+        assert!(sample_id > 0);
     }
 
     #[test]
-    fn updater_apply_removes_image_and_adds_new() {
+    fn updater_apply_removes_sample_and_adds_new() {
         let tmp = TempDir::new().expect("tempdir");
         let db = in_memory_db();
 
-        let ds = DatasetService::register(&db, "apply-ds", tmp.path(), DatasetFormat::Coco)
+        let ds = DatasetService::register(&db, "apply-ds", tmp.path(), DatasetFormat::coco())
             .expect("register");
 
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                params![ds.id, "old.jpg", "/tmp/old.jpg"],
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                params![ds.id, "old-sample"],
             )
-            .expect("insert old image");
-        let old_img_id = db.conn.last_insert_rowid();
+            .expect("insert old sample");
+        let old_sample_id = db.conn.last_insert_rowid();
 
         let mut updater = DmanDatasetUpdater::new_with_db(db, "apply-ds").expect("updater");
-        updater.pending_ops.push(UpdateOp::RemoveImage {
-            image_db_id: old_img_id,
+        updater.pending_ops.push(UpdateOp::RemoveSample {
+            sample_db_id: old_sample_id,
         });
-        updater.pending_ops.push(UpdateOp::AddImage {
-            path: tmp.path().join("new.jpg").to_str().unwrap().to_string(),
-            metadata: None,
+        updater.pending_ops.push(UpdateOp::AddSample {
+            name: "new-sample".to_string(),
         });
 
         updater.apply_internal().expect("apply");
 
-        let img_count: i64 = updater
+        let sample_count: i64 = updater
             .db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 params![updater.dataset_id],
                 |r| r.get(0),
             )
             .expect("count");
-        assert_eq!(img_count, 1);
+        assert_eq!(sample_count, 1);
 
         let new_name: String = updater
             .db
             .conn
             .query_row(
-                "SELECT file_name FROM images WHERE dataset_id = ?1",
+                "SELECT name FROM samples WHERE dataset_id = ?1",
                 params![updater.dataset_id],
                 |r| r.get(0),
             )
             .expect("name");
-        assert_eq!(new_name, "new.jpg");
+        assert_eq!(new_name, "new-sample");
     }
 
     #[test]
@@ -776,22 +1061,23 @@ mod tests {
         let tmp = TempDir::new().expect("tempdir");
         let db = in_memory_db();
 
-        let ds = DatasetService::register(&db, "ann-ds", tmp.path(), DatasetFormat::Coco)
+        let ds = DatasetService::register(&db, "ann-ds", tmp.path(), DatasetFormat::coco())
             .expect("register");
 
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                params![ds.id, "img.jpg", "/tmp/img.jpg"],
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                params![ds.id, "sample-001"],
             )
-            .expect("insert image");
-        let img_id = db.conn.last_insert_rowid();
+            .expect("insert sample");
+        let sample_id = db.conn.last_insert_rowid();
 
         let mut updater = DmanDatasetUpdater::new_with_db(db, "ann-ds").expect("updater");
         updater.pending_ops.push(UpdateOp::AddAnnotation {
-            image_db_id: img_id,
+            sample_db_id: sample_id,
+            asset_db_id: None,
             category: "cat".to_string(),
-            bbox: vec![1.0, 2.0, 3.0, 4.0],
+            bbox: Some(vec![1.0, 2.0, 3.0, 4.0]),
             metadata: None,
         });
 
@@ -801,11 +1087,123 @@ mod tests {
             .db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM annotations WHERE image_id = ?1",
-                params![img_id],
+                "SELECT COUNT(*) FROM annotations WHERE sample_id = ?1",
+                params![sample_id],
                 |r| r.get(0),
             )
             .expect("count");
         assert_eq!(ann_count, 1);
+
+        let bbox_json: String = updater
+            .db
+            .conn
+            .query_row(
+                "SELECT bbox FROM annotations WHERE sample_id = ?1",
+                params![sample_id],
+                |r| r.get(0),
+            )
+            .expect("bbox");
+        assert!(
+            bbox_json.contains("\"width\""),
+            "expected 'width' key in bbox JSON, got: {bbox_json}"
+        );
+        assert!(
+            bbox_json.contains("\"height\""),
+            "expected 'height' key in bbox JSON, got: {bbox_json}"
+        );
+        assert!(
+            !bbox_json.contains("\"w\""),
+            "bbox JSON must not use 'w' key, got: {bbox_json}"
+        );
+        assert!(
+            !bbox_json.contains("\"h\""),
+            "bbox JSON must not use 'h' key, got: {bbox_json}"
+        );
+    }
+
+    #[test]
+    fn builder_bbox_uses_width_height_keys() {
+        let tmp = TempDir::new().expect("tempdir");
+        let db = in_memory_db();
+        let mut builder = DmanDatasetBuilder::new_with_db(db, "bbox-test-ds", None);
+
+        builder
+            .add_image_internal(tmp.path().join("a.jpg").to_str().unwrap(), None)
+            .expect("add image");
+        builder
+            .add_annotation_internal(
+                "a.jpg",
+                "bird",
+                Some(vec![5.0, 10.0, 100.0, 80.0]),
+                None,
+                None,
+                None,
+            )
+            .expect("add annotation");
+
+        builder.build_internal().expect("build");
+
+        let bbox_json: String = builder
+            .db
+            .conn
+            .query_row("SELECT bbox FROM annotations LIMIT 1", [], |r| r.get(0))
+            .expect("bbox");
+
+        assert!(
+            bbox_json.contains("\"width\""),
+            "expected 'width' key in bbox JSON, got: {bbox_json}"
+        );
+        assert!(
+            bbox_json.contains("\"height\""),
+            "expected 'height' key in bbox JSON, got: {bbox_json}"
+        );
+        assert!(
+            !bbox_json.contains("\"w\""),
+            "bbox JSON must not use short 'w' key, got: {bbox_json}"
+        );
+        assert!(
+            !bbox_json.contains("\"h\""),
+            "bbox JSON must not use short 'h' key, got: {bbox_json}"
+        );
+    }
+
+    #[test]
+    fn add_sample_and_asset_separate_methods() {
+        let tmp = TempDir::new().expect("tempdir");
+        let db = in_memory_db();
+        let mut builder = DmanDatasetBuilder::new_with_db(db, "sep-ds", None);
+
+        builder
+            .add_sample_internal("sample-a", None)
+            .expect("add sample");
+        builder
+            .add_asset_internal(
+                "sample-a",
+                "image",
+                tmp.path().join("a.jpg").to_str().unwrap(),
+                Some(640),
+                Some(480),
+                None,
+            )
+            .expect("add asset");
+
+        builder.build_internal().expect("build");
+
+        let asset_count: i64 = builder
+            .db
+            .conn
+            .query_row("SELECT COUNT(*) FROM assets", [], |r| r.get(0))
+            .expect("count assets");
+        assert_eq!(asset_count, 1);
+
+        let (w, h): (Option<i64>, Option<i64>) = builder
+            .db
+            .conn
+            .query_row("SELECT width, height FROM assets LIMIT 1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .expect("asset dims");
+        assert_eq!(w, Some(640));
+        assert_eq!(h, Some(480));
     }
 }

@@ -10,7 +10,7 @@ use crate::dataset::DatasetService;
 use crate::db::Database;
 use crate::formats::{FormatExporter, FormatImporter};
 use crate::storage::StorageManager;
-use crate::types::{Dataset, DatasetFormat};
+use crate::types::{AssetType, Dataset, DatasetFormat};
 use crate::{DmanError, Result};
 
 #[derive(Debug, Deserialize)]
@@ -94,7 +94,7 @@ impl FormatImporter for YoloImporter {
             path.join("labels").join(rest)
         };
 
-        let dataset = DatasetService::register(db, dataset_name, path, DatasetFormat::Yolo)?;
+        let dataset = DatasetService::register(db, dataset_name, path, DatasetFormat::yolo())?;
         let dataset_id = dataset.id;
 
         db.conn
@@ -144,11 +144,20 @@ impl FormatImporter for YoloImporter {
                         .unwrap_or("")
                         .to_string();
 
+                    // Insert sample
                     db.conn.execute(
-                        "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                        params![dataset_id, file_name, img_path.to_string_lossy().as_ref()],
+                        "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                        params![dataset_id, stem],
                     )?;
-                    let image_id = db.conn.last_insert_rowid();
+                    let sample_id = db.conn.last_insert_rowid();
+
+                    // Insert asset (image)
+                    let asset_type_str = AssetType::Image.to_string();
+                    db.conn.execute(
+                        "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, ?2, ?3, ?4)",
+                        params![sample_id, asset_type_str, file_name, img_path.to_string_lossy().as_ref()],
+                    )?;
+                    let asset_id = db.conn.last_insert_rowid();
 
                     let label_path = labels_dir.join(format!("{stem}.txt"));
 
@@ -193,8 +202,8 @@ impl FormatImporter for YoloImporter {
                             let bbox_json = serde_json::json!({
                                 "x": x,
                                 "y": y,
-                                "w": w,
-                                "h": h,
+                                "width": w,
+                                "height": h,
                                 "normalized": true
                             })
                             .to_string();
@@ -202,8 +211,8 @@ impl FormatImporter for YoloImporter {
                             let cat_id: Option<i64> = class_to_cat_id.get(class_id).copied();
 
                             db.conn.execute(
-                                "INSERT INTO annotations (image_id, category_id, bbox) VALUES (?1, ?2, ?3)",
-                                params![image_id, cat_id, bbox_json],
+                                "INSERT INTO annotations (sample_id, asset_id, category_id, bbox) VALUES (?1, ?2, ?3, ?4)",
+                                params![sample_id, asset_id, cat_id, bbox_json],
                             )?;
                         }
                     }
@@ -270,19 +279,23 @@ impl FormatExporter for YoloExporter {
             .map(|(idx, (id, _))| (*id, idx))
             .collect();
 
-        // ── 3. Load images ────────────────────────────────────────────────
-        let mut img_stmt = db.conn.prepare(
-            "SELECT id, file_name, file_path FROM images WHERE dataset_id = ?1 ORDER BY id",
+        // ── 3. Load assets (via samples join) ─────────────────────────────
+        let mut asset_stmt = db.conn.prepare(
+            "SELECT a.id, s.id, a.file_name, a.file_path \
+             FROM assets a \
+             JOIN samples s ON a.sample_id = s.id \
+             WHERE s.dataset_id = ?1 \
+             ORDER BY a.id",
         )?;
-        let images: Vec<(i64, String, String)> = img_stmt
+        let assets: Vec<(i64, i64, String, String)> = asset_stmt
             .query_map(params![dataset_id], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(DmanError::Database)?;
 
-        // ── 4. For each image: copy file + write label txt ────────────────
-        for (image_id, file_name, file_path) in &images {
+        // ── 4. For each asset: copy file + write label txt ────────────────
+        for (asset_id, sample_id, file_name, file_path) in &assets {
             // Copy image file if it exists
             let src = Path::new(file_path);
             if src.exists() {
@@ -290,12 +303,14 @@ impl FormatExporter for YoloExporter {
                 fs::copy(src, &dst).map_err(DmanError::Io)?;
             }
 
-            // Load annotations for this image
-            let mut ann_stmt = db
-                .conn
-                .prepare("SELECT category_id, bbox FROM annotations WHERE image_id = ?1")?;
+            // Load annotations for this asset
+            let mut ann_stmt = db.conn.prepare(
+                "SELECT category_id, bbox FROM annotations WHERE sample_id = ?1 AND asset_id = ?2",
+            )?;
             let annotations: Vec<(Option<i64>, Option<String>)> = ann_stmt
-                .query_map(params![image_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .query_map(params![sample_id, asset_id], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?
                 .collect::<rusqlite::Result<Vec<_>>>()
                 .map_err(DmanError::Database)?;
 
@@ -322,8 +337,8 @@ impl FormatExporter for YoloExporter {
 
                 let x = bbox_val["x"].as_f64().unwrap_or(0.0);
                 let y = bbox_val["y"].as_f64().unwrap_or(0.0);
-                let w = bbox_val["w"].as_f64().unwrap_or(0.0);
-                let h = bbox_val["h"].as_f64().unwrap_or(0.0);
+                let w = bbox_val["width"].as_f64().unwrap_or(0.0);
+                let h = bbox_val["height"].as_f64().unwrap_or(0.0);
 
                 lines.push(format!("{class_idx} {x} {y} {w} {h}"));
             }
@@ -415,17 +430,17 @@ mod tests {
         assert_eq!(dataset.name, "yolo-fixture");
         assert!(dataset.id > 0);
 
-        // Verify exactly 3 images were inserted
-        let img_count: i64 = db
+        // Verify exactly 3 samples were inserted
+        let sample_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 rusqlite::params![dataset.id],
                 |row| row.get(0),
             )
-            .expect("count images");
+            .expect("count samples");
 
-        assert_eq!(img_count, 3, "expected 3 images imported from fixture");
+        assert_eq!(sample_count, 3, "expected 3 samples imported from fixture");
     }
 
     #[test]
@@ -442,8 +457,8 @@ mod tests {
         let ann_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM annotations WHERE image_id IN \
-                 (SELECT id FROM images WHERE dataset_id = ?1)",
+                "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+                 (SELECT id FROM samples WHERE dataset_id = ?1)",
                 rusqlite::params![dataset.id],
                 |row| row.get(0),
             )
@@ -507,8 +522,8 @@ mod tests {
         let ann_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM annotations WHERE image_id IN \
-                 (SELECT id FROM images WHERE dataset_id = ?1)",
+                "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+                 (SELECT id FROM samples WHERE dataset_id = ?1)",
                 rusqlite::params![dataset.id],
                 |row| row.get(0),
             )

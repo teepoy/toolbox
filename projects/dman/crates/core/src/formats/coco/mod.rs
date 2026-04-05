@@ -9,7 +9,7 @@ use crate::dataset::DatasetService;
 use crate::db::Database;
 use crate::formats::{FormatExporter, FormatImporter};
 use crate::storage::StorageManager;
-use crate::types::{Dataset, DatasetFormat};
+use crate::types::{AssetType, Dataset, DatasetFormat};
 use crate::{DmanError, Result};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -115,7 +115,8 @@ impl FormatImporter for CocoImporter {
             }
         }
 
-        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json")
+        if path.is_file()
+            && path.extension().and_then(|e| e.to_str()) == Some("json")
             && let Ok(content) = fs::read_to_string(path)
             && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
         {
@@ -151,7 +152,7 @@ impl FormatImporter for CocoImporter {
         };
 
         let dataset =
-            DatasetService::register(db, dataset_name, dataset_path, DatasetFormat::Coco)?;
+            DatasetService::register(db, dataset_name, dataset_path, DatasetFormat::coco())?;
         let dataset_id = dataset.id;
 
         db.conn.execute("BEGIN IMMEDIATE", [])?;
@@ -165,33 +166,47 @@ impl FormatImporter for CocoImporter {
             cat_id_map.insert(cat.id, db.conn.last_insert_rowid());
         }
 
-        let mut img_id_map: HashMap<i64, i64> = HashMap::new();
+        let mut img_id_map: HashMap<i64, (i64, i64)> = HashMap::new();
         for img in &coco.images {
             let file_path = dataset_path.join(&img.file_name);
+            let stem = std::path::Path::new(&img.file_name)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&img.file_name)
+                .to_string();
+            let asset_type_str = AssetType::Image.to_string();
             db.conn.execute(
-                "INSERT INTO images (dataset_id, file_name, file_path, width, height) VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                params![dataset_id, stem],
+            )?;
+            let sample_id = db.conn.last_insert_rowid();
+            db.conn.execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path, width, height) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
-                    dataset_id,
+                    sample_id,
+                    asset_type_str,
                     img.file_name,
                     file_path.to_string_lossy().as_ref(),
                     img.width,
                     img.height
                 ],
             )?;
-            img_id_map.insert(img.id, db.conn.last_insert_rowid());
+            let asset_id = db.conn.last_insert_rowid();
+            img_id_map.insert(img.id, (sample_id, asset_id));
         }
 
         for ann in &coco.annotations {
-            let db_img_id = match img_id_map.get(&ann.image_id) {
-                Some(id) => *id,
-                None => {
-                    eprintln!(
-                        "[coco importer] annotation {} references unknown image_id {}, skipping",
-                        ann.id, ann.image_id
-                    );
-                    continue;
-                }
-            };
+            let (db_sample_id, db_asset_id) =
+                img_id_map
+                    .get(&ann.image_id)
+                    .copied()
+                    .ok_or_else(|| DmanError::ImportFailed {
+                        path: json_path.clone(),
+                        reason: format!(
+                            "annotation {} references unknown image_id {}",
+                            ann.id, ann.image_id
+                        ),
+                    })?;
 
             let db_cat_id = cat_id_map.get(&ann.category_id).copied();
 
@@ -199,8 +214,8 @@ impl FormatImporter for CocoImporter {
                 let bbox = serde_json::json!({
                     "x": ann.bbox[0],
                     "y": ann.bbox[1],
-                    "w": ann.bbox[2],
-                    "h": ann.bbox[3]
+                    "width": ann.bbox[2],
+                    "height": ann.bbox[3]
                 });
                 Some(serde_json::to_string(&bbox)?)
             } else {
@@ -222,8 +237,8 @@ impl FormatImporter for CocoImporter {
             let meta_str = serde_json::to_string(&meta)?;
 
             db.conn.execute(
-                "INSERT INTO annotations (image_id, category_id, bbox, segmentation, metadata) VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![db_img_id, db_cat_id, bbox_json, seg_json, meta_str],
+                "INSERT INTO annotations (sample_id, asset_id, category_id, bbox, segmentation, metadata) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![db_sample_id, db_asset_id, db_cat_id, bbox_json, seg_json, meta_str],
             )?;
         }
 
@@ -280,7 +295,10 @@ impl FormatExporter for CocoExporter {
             .collect();
 
         let mut img_stmt = db.conn.prepare(
-            "SELECT id, file_name, width, height FROM images WHERE dataset_id = ?1 ORDER BY id",
+            "SELECT a.id, a.file_name, a.width, a.height \
+             FROM assets a \
+             JOIN samples s ON a.sample_id = s.id \
+             WHERE s.dataset_id = ?1 ORDER BY a.id",
         )?;
         struct RawImg {
             db_id: i64,
@@ -317,16 +335,16 @@ impl FormatExporter for CocoExporter {
             .collect();
 
         let mut ann_stmt = db.conn.prepare(
-            "SELECT a.id, a.image_id, a.category_id, a.bbox, a.segmentation \
+            "SELECT a.id, a.asset_id, a.category_id, a.bbox, a.segmentation \
              FROM annotations a \
-             INNER JOIN images i ON a.image_id = i.id \
-             WHERE i.dataset_id = ?1 \
+             JOIN samples s ON a.sample_id = s.id \
+             WHERE s.dataset_id = ?1 \
              ORDER BY a.id",
         )?;
 
         struct RawAnn {
             _db_id: i64,
-            image_id: i64,
+            asset_id: Option<i64>,
             category_id: Option<i64>,
             bbox_str: Option<String>,
             seg_str: Option<String>,
@@ -336,7 +354,7 @@ impl FormatExporter for CocoExporter {
             .query_map(params![dataset_id], |row| {
                 Ok(RawAnn {
                     _db_id: row.get(0)?,
-                    image_id: row.get(1)?,
+                    asset_id: row.get(1)?,
                     category_id: row.get(2)?,
                     bbox_str: row.get(3)?,
                     seg_str: row.get(4)?,
@@ -347,7 +365,7 @@ impl FormatExporter for CocoExporter {
         let mut export_annotations: Vec<CocoAnnotation> = Vec::with_capacity(raw_anns.len());
 
         for (i, ann) in raw_anns.iter().enumerate() {
-            let export_img_id = match img_id_remap.get(&ann.image_id) {
+            let export_img_id = match ann.asset_id.and_then(|aid| img_id_remap.get(&aid)) {
                 Some(id) => *id,
                 None => continue,
             };
@@ -361,8 +379,8 @@ impl FormatExporter for CocoExporter {
                 if let Ok(obj) = serde_json::from_str::<serde_json::Value>(bs) {
                     let x = obj["x"].as_f64().unwrap_or(0.0);
                     let y = obj["y"].as_f64().unwrap_or(0.0);
-                    let w = obj["w"].as_f64().unwrap_or(0.0);
-                    let h = obj["h"].as_f64().unwrap_or(0.0);
+                    let w = obj["width"].as_f64().unwrap_or(0.0);
+                    let h = obj["height"].as_f64().unwrap_or(0.0);
                     (vec![x, y, w, h], w * h)
                 } else {
                     (vec![], 0.0)
@@ -474,22 +492,22 @@ mod tests {
             .expect("import should succeed");
 
         assert_eq!(ds.name, "test-coco");
-        assert!(matches!(ds.format, DatasetFormat::Coco));
+        assert_eq!(ds.format, DatasetFormat::coco());
 
         let img_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 params![ds.id],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(img_count, 3, "should have 3 images");
+        assert_eq!(img_count, 3, "should have 3 samples");
 
         let ann_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM annotations WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
+                "SELECT COUNT(*) FROM annotations WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1)",
                 params![ds.id],
                 |r| r.get(0),
             )
@@ -521,7 +539,7 @@ mod tests {
         let bbox_str: String = db
             .conn
             .query_row(
-                "SELECT bbox FROM annotations WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1) ORDER BY id LIMIT 1",
+                "SELECT bbox FROM annotations WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1) ORDER BY id LIMIT 1",
                 params![ds.id],
                 |r| r.get(0),
             )
@@ -530,8 +548,8 @@ mod tests {
         let bbox: serde_json::Value = serde_json::from_str(&bbox_str).unwrap();
         assert_eq!(bbox["x"], 100.0);
         assert_eq!(bbox["y"], 120.0);
-        assert_eq!(bbox["w"], 200.0);
-        assert_eq!(bbox["h"], 150.0);
+        assert_eq!(bbox["width"], 200.0);
+        assert_eq!(bbox["height"], 150.0);
     }
 
     #[test]

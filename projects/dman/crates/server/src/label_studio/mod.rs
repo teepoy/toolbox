@@ -287,11 +287,23 @@ pub fn import_tasks_to_db(
         let default_width: u32 = 1920;
         let default_height: u32 = 1080;
 
+        let sample_name = std::path::Path::new(&file_name)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&file_name)
+            .to_string();
+
         db.conn.execute(
-            "INSERT INTO images (dataset_id, file_name, file_path, width, height) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![dataset_id, file_name, image_url, default_width, default_height],
+            "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+            params![dataset_id, sample_name],
         )?;
-        let image_id = db.conn.last_insert_rowid();
+        let sample_id = db.conn.last_insert_rowid();
+
+        db.conn.execute(
+            "INSERT INTO assets (sample_id, asset_type, file_name, file_path, width, height) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![sample_id, "image", file_name, image_url, default_width, default_height],
+        )?;
+        let asset_id = db.conn.last_insert_rowid();
 
         for annotation in &task.annotations {
             for result in &annotation.result {
@@ -312,8 +324,8 @@ pub fn import_tasks_to_db(
                     let bbox_json = serde_json::to_string(&parsed.bbox)?;
 
                     db.conn.execute(
-                        "INSERT INTO annotations (image_id, category_id, bbox) VALUES (?1, ?2, ?3)",
-                        params![image_id, category_id, bbox_json],
+                        "INSERT INTO annotations (sample_id, asset_id, category_id, bbox) VALUES (?1, ?2, ?3, ?4)",
+                        params![sample_id, asset_id, category_id, bbox_json],
                     )?;
                 }
             }
@@ -340,7 +352,7 @@ pub fn import_tasks_to_db(
                 id,
                 name,
                 path: PathBuf::from(path),
-                format: DatasetFormat::Custom("LabelStudio".to_string()),
+                format: DatasetFormat::label_studio(),
                 schema_path: schema_path.map(PathBuf::from),
                 created_at,
                 updated_at,
@@ -373,7 +385,7 @@ pub fn build_export_tasks(
 
     let mut stmt = db
         .conn
-        .prepare("SELECT file_name FROM images WHERE dataset_id = ?1 ORDER BY id")?;
+        .prepare("SELECT a.file_name FROM assets a JOIN samples s ON s.id = a.sample_id WHERE s.dataset_id = ?1 ORDER BY a.id")?;
 
     let tasks: Vec<serde_json::Value> = stmt
         .query_map(params![dataset_id], |row| {
@@ -481,17 +493,17 @@ mod tests {
         let image_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 params![dataset.id],
                 |row| row.get(0),
             )
-            .expect("count images");
+            .expect("count samples");
         assert_eq!(image_count, 2, "should have 2 images");
 
         let ann_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM annotations WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
+                "SELECT COUNT(*) FROM annotations WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1)",
                 params![dataset.id],
                 |row| row.get(0),
             )
@@ -541,8 +553,8 @@ mod tests {
         let file_name: String = db
             .conn
             .query_row(
-                "SELECT file_name FROM images ORDER BY id LIMIT 1",
-                [],
+                "SELECT a.file_name FROM assets a JOIN samples s ON s.id = a.sample_id WHERE s.dataset_id = ?1 ORDER BY a.id LIMIT 1",
+                params![dataset.id],
                 |row| row.get(0),
             )
             .expect("get file_name");
@@ -565,16 +577,31 @@ mod tests {
 
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'img_001.jpg', '/tmp/img_001.jpg')",
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 'img_001')",
                 params![dataset_id],
             )
-            .expect("insert img1");
+            .expect("insert sample1");
+        let sample1_id = db.conn.last_insert_rowid();
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'img_002.png', '/tmp/img_002.png')",
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', 'img_001.jpg', '/tmp/img_001.jpg')",
+                params![sample1_id],
+            )
+            .expect("insert asset1");
+
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 'img_002')",
                 params![dataset_id],
             )
-            .expect("insert img2");
+            .expect("insert sample2");
+        let sample2_id = db.conn.last_insert_rowid();
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', 'img_002.png', '/tmp/img_002.png')",
+                params![sample2_id],
+            )
+            .expect("insert asset2");
 
         let tasks = build_export_tasks(&db, "export-ds", 8080).expect("build export tasks");
 

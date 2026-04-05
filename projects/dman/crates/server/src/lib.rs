@@ -55,10 +55,7 @@ async fn image_handler(
             let content_type = content_type_for_extension(ext);
             Response::builder()
                 .status(StatusCode::OK)
-                .header(
-                    header::CONTENT_TYPE,
-                    HeaderValue::from_static(content_type),
-                )
+                .header(header::CONTENT_TYPE, HeaderValue::from_static(content_type))
                 .body(Body::from(bytes))
                 .unwrap_or_else(|_| {
                     Response::builder()
@@ -123,12 +120,15 @@ pub async fn create_router(state: AppState) -> Router {
         .route("/api/health", get(health_handler))
         .route("/api/datasets", get(api::list_datasets))
         .route("/api/datasets/{name}", get(api::get_dataset))
-        .route("/api/datasets/{name}/images", get(api::list_images))
-        .route("/api/datasets/{name}/images/{id}", get(api::get_image))
+        .route("/api/datasets/{name}/samples", get(api::list_samples))
+        .route("/api/datasets/{name}/assets/{id}", get(api::get_asset))
         .route("/api/datasets/{name}/categories", get(api::list_categories))
         .route("/api/datasets/{name}/stats", get(api::get_dataset_stats))
         .route("/api/virtual-datasets", get(api::list_virtual_datasets))
-        .route("/api/virtual-datasets/{name}", get(api::get_virtual_dataset))
+        .route(
+            "/api/virtual-datasets/{name}",
+            get(api::get_virtual_dataset),
+        )
         .route("/images/{dataset_id}/{filename}", get(image_handler))
         .fallback(spa_fallback)
         .with_state(state)
@@ -210,7 +210,10 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body_str = std::str::from_utf8(&body).unwrap();
-        assert!(body_str.contains("dman"), "SPA fallback should contain 'dman'");
+        assert!(
+            body_str.contains("dman"),
+            "SPA fallback should contain 'dman'"
+        );
     }
 
     #[tokio::test]

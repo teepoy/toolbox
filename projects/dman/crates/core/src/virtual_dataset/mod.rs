@@ -7,35 +7,22 @@ use std::collections::HashSet;
 use crate::{
     db::Database,
     error::{DmanError, Result},
-    types::{FilterOp, Image, VirtualDataset, VirtualDatasetDef},
+    types::{FilterOp, Sample, VirtualDataset, VirtualDatasetDef},
 };
 
 pub struct VirtualDatasetService;
 
 // ─── Row helpers ────────────────────────────────────────────────────────────
 
-fn row_to_image(row: &rusqlite::Row<'_>) -> rusqlite::Result<Image> {
-    use std::path::PathBuf;
-    let id: i64 = row.get(0)?;
-    let dataset_id: i64 = row.get(1)?;
-    let file_name: String = row.get(2)?;
-    let file_path: String = row.get(3)?;
-    let width: Option<u32> = row.get(4)?;
-    let height: Option<u32> = row.get(5)?;
-    let hash: Option<String> = row.get(6)?;
-    let metadata_str: Option<String> = row.get(7)?;
-    let metadata = metadata_str
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok());
-    Ok(Image {
-        id,
-        dataset_id,
-        file_name,
-        file_path: PathBuf::from(file_path),
-        width,
-        height,
-        hash,
-        metadata,
+fn row_to_sample(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sample> {
+    Ok(Sample {
+        id: row.get(0)?,
+        dataset_id: row.get(1)?,
+        name: row.get(2)?,
+        metadata: row
+            .get::<_, Option<String>>(3)?
+            .and_then(|s| serde_json::from_str(&s).ok()),
+        created_at: row.get(4)?,
     })
 }
 
@@ -148,44 +135,51 @@ fn list_internal(db: &Database) -> Result<Vec<VirtualDataset>> {
     Ok(rows)
 }
 
-// ─── Image fetching ───────────────────────────────────────────────────────────
+// ─── Sample fetching ──────────────────────────────────────────────────────────
 
-fn fetch_images_for_datasets(db: &Database, dataset_ids: &[i64]) -> Result<Vec<Image>> {
+fn fetch_samples_for_datasets(db: &Database, dataset_ids: &[i64]) -> Result<Vec<Sample>> {
     if dataset_ids.is_empty() {
         return Ok(vec![]);
     }
     // Build placeholders: ?1, ?2, ...
     let placeholders: Vec<String> = (1..=dataset_ids.len()).map(|i| format!("?{}", i)).collect();
     let sql = format!(
-        "SELECT id, dataset_id, file_name, file_path, width, height, hash, metadata \
-         FROM images WHERE dataset_id IN ({}) ORDER BY id",
+        "SELECT id, dataset_id, name, metadata, created_at \
+         FROM samples WHERE dataset_id IN ({}) ORDER BY id",
         placeholders.join(", ")
     );
     let mut stmt = db.conn.prepare(&sql)?;
     let rows = stmt
-        .query_map(rusqlite::params_from_iter(dataset_ids.iter()), row_to_image)?
+        .query_map(
+            rusqlite::params_from_iter(dataset_ids.iter()),
+            row_to_sample,
+        )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
 // ─── Evaluation engine ───────────────────────────────────────────────────────
 
-/// Evaluate a VirtualDatasetDef against a base set of images.
-/// `source_images` is the initial image pool from `vds.source_datasets`.
-fn eval_def(db: &Database, def: &VirtualDatasetDef, source_images: &[Image]) -> Result<Vec<Image>> {
+/// Evaluate a VirtualDatasetDef against a base set of samples.
+/// `source_samples` is the initial sample pool from `vds.source_datasets`.
+fn eval_def(
+    db: &Database,
+    def: &VirtualDatasetDef,
+    source_samples: &[Sample],
+) -> Result<Vec<Sample>> {
     match def {
         VirtualDatasetDef::Filter { column, op, value } => {
-            apply_filter(db, source_images, column, op, value)
+            apply_filter(db, source_samples, column, op, value)
         }
 
         VirtualDatasetDef::Merge { datasets } => {
-            // Collect images from the extra dataset IDs and union with source_images
-            let extra = fetch_images_for_datasets(db, datasets)?;
+            // Collect samples from the extra dataset IDs and union with source_samples
+            let extra = fetch_samples_for_datasets(db, datasets)?;
             let mut seen: HashSet<i64> = HashSet::new();
-            let mut result: Vec<Image> = vec![];
-            for img in source_images.iter().chain(extra.iter()) {
-                if seen.insert(img.id) {
-                    result.push(img.clone());
+            let mut result: Vec<Sample> = vec![];
+            for sample in source_samples.iter().chain(extra.iter()) {
+                if seen.insert(sample.id) {
+                    result.push(sample.clone());
                 }
             }
             Ok(result)
@@ -194,16 +188,16 @@ fn eval_def(db: &Database, def: &VirtualDatasetDef, source_images: &[Image]) -> 
         VirtualDatasetDef::Sample { ratio } => {
             let ratio = ratio.clamp(0.0, 1.0);
             // Deterministic sample: sort by id, take first `ratio` fraction
-            let mut sorted = source_images.to_vec();
-            sorted.sort_by_key(|img| hash_id(img.id, 0));
+            let mut sorted = source_samples.to_vec();
+            sorted.sort_by_key(|s| hash_id(s.id, 0));
             let count = (sorted.len() as f64 * ratio).round() as usize;
             Ok(sorted.into_iter().take(count).collect())
         }
 
         VirtualDatasetDef::Split { ratios } => {
             // Return the first bucket by sorted key
-            let mut sorted = source_images.to_vec();
-            sorted.sort_by_key(|img| hash_id(img.id, 42));
+            let mut sorted = source_samples.to_vec();
+            sorted.sort_by_key(|s| hash_id(s.id, 42));
 
             // Find first bucket name alphabetically
             let mut keys: Vec<&String> = ratios.keys().collect();
@@ -222,7 +216,7 @@ fn eval_def(db: &Database, def: &VirtualDatasetDef, source_images: &[Image]) -> 
         }
 
         VirtualDatasetDef::Chain(steps) => {
-            let mut current = source_images.to_vec();
+            let mut current = source_samples.to_vec();
             for step in steps {
                 current = eval_def(db, step, &current)?;
             }
@@ -230,13 +224,13 @@ fn eval_def(db: &Database, def: &VirtualDatasetDef, source_images: &[Image]) -> 
         }
 
         VirtualDatasetDef::SchemaTransform { .. } => {
-            // Schema transforms don't affect image membership (T18 scope)
-            Ok(source_images.to_vec())
+            // Schema transforms don't affect sample membership (T18 scope)
+            Ok(source_samples.to_vec())
         }
     }
 }
 
-/// Simple deterministic hash: FNV-1a-style mixing of image_id ^ seed
+/// Simple deterministic hash: FNV-1a-style mixing of id ^ seed
 fn hash_id(id: i64, seed: u64) -> u64 {
     let v = (id as u64) ^ seed;
     // FNV-1a inspired mixing
@@ -251,85 +245,85 @@ fn hash_id(id: i64, seed: u64) -> u64 {
 
 fn apply_filter(
     db: &Database,
-    images: &[Image],
+    samples: &[Sample],
     column: &str,
     op: &FilterOp,
     value: &serde_json::Value,
-) -> Result<Vec<Image>> {
+) -> Result<Vec<Sample>> {
     match column {
         "annotated" => {
-            // HasAnnotations: images with at least one annotation
-            filter_has_annotations(db, images)
+            // HasAnnotations: samples with at least one annotation
+            filter_has_annotations(db, samples)
         }
         "category" | "category_name" => {
-            // CategoryIs: images whose annotation category name matches value
+            // CategoryIs: samples whose annotation category name matches value
             let cat_name = value.as_str().ok_or_else(|| {
                 DmanError::StorageError("category filter value must be a string".to_string())
             })?;
-            filter_by_category(db, images, cat_name, op)
+            filter_by_category(db, samples, cat_name, op)
         }
         _ if column.starts_with("metadata.") => {
-            // MetadataEq: images where metadata[key] matches value
+            // MetadataEq: samples where metadata[key] matches value
             let key = &column["metadata.".len()..];
-            filter_by_metadata(images, key, op, value)
+            filter_by_metadata(samples, key, op, value)
         }
         _ => {
-            // Generic column-based filter on image fields
-            filter_by_field(images, column, op, value)
+            // Generic column-based filter on sample fields
+            filter_by_field(samples, column, op, value)
         }
     }
 }
 
-fn filter_has_annotations(db: &Database, images: &[Image]) -> Result<Vec<Image>> {
-    if images.is_empty() {
+fn filter_has_annotations(db: &Database, samples: &[Sample]) -> Result<Vec<Sample>> {
+    if samples.is_empty() {
         return Ok(vec![]);
     }
-    // Build set of image IDs that have annotations
-    let image_ids: Vec<i64> = images.iter().map(|img| img.id).collect();
-    let placeholders: Vec<String> = (1..=image_ids.len()).map(|i| format!("?{}", i)).collect();
+    // Build set of sample IDs that have annotations
+    let sample_ids: Vec<i64> = samples.iter().map(|s| s.id).collect();
+    let placeholders: Vec<String> = (1..=sample_ids.len()).map(|i| format!("?{}", i)).collect();
     let sql = format!(
-        "SELECT DISTINCT image_id FROM annotations WHERE image_id IN ({})",
+        "SELECT DISTINCT sample_id FROM annotations WHERE sample_id IN ({})",
         placeholders.join(", ")
     );
     let mut stmt = db.conn.prepare(&sql)?;
     let annotated_ids: HashSet<i64> = stmt
-        .query_map(rusqlite::params_from_iter(image_ids.iter()), |row| {
+        .query_map(rusqlite::params_from_iter(sample_ids.iter()), |row| {
             row.get::<_, i64>(0)
         })?
         .collect::<rusqlite::Result<HashSet<_>>>()?;
 
-    Ok(images
+    Ok(samples
         .iter()
-        .filter(|img| annotated_ids.contains(&img.id))
+        .filter(|s| annotated_ids.contains(&s.id))
         .cloned()
         .collect())
 }
 
 fn filter_by_category(
     db: &Database,
-    images: &[Image],
+    samples: &[Sample],
     cat_name: &str,
     _op: &FilterOp,
-) -> Result<Vec<Image>> {
-    if images.is_empty() {
+) -> Result<Vec<Sample>> {
+    if samples.is_empty() {
         return Ok(vec![]);
     }
-    // Find image IDs that have an annotation with the given category name
-    let image_ids: Vec<i64> = images.iter().map(|img| img.id).collect();
+    // Find sample IDs that have an annotation with the given category name
+    let sample_ids: Vec<i64> = samples.iter().map(|s| s.id).collect();
 
     let sql = format!(
-        "SELECT DISTINCT a.image_id \
+        "SELECT DISTINCT a.sample_id \
          FROM annotations a \
          JOIN categories c ON a.category_id = c.id \
-         WHERE c.name = ?1 AND a.image_id IN ({})",
-        (2..=image_ids.len() + 1)
+         WHERE c.name = ?1 AND a.sample_id IN ({})",
+        (2..=sample_ids.len() + 1)
             .map(|i| format!("?{}", i))
             .collect::<Vec<_>>()
             .join(", ")
     );
 
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(cat_name.to_string())];
-    for id in &image_ids {
+    for id in &sample_ids {
         params_vec.push(Box::new(*id));
     }
 
@@ -341,23 +335,23 @@ fn filter_by_category(
         )?
         .collect::<rusqlite::Result<HashSet<_>>>()?;
 
-    Ok(images
+    Ok(samples
         .iter()
-        .filter(|img| matching_ids.contains(&img.id))
+        .filter(|s| matching_ids.contains(&s.id))
         .cloned()
         .collect())
 }
 
 fn filter_by_metadata(
-    images: &[Image],
+    samples: &[Sample],
     key: &str,
     _op: &FilterOp,
     value: &serde_json::Value,
-) -> Result<Vec<Image>> {
-    Ok(images
+) -> Result<Vec<Sample>> {
+    Ok(samples
         .iter()
-        .filter(|img| {
-            if let Some(meta) = &img.metadata {
+        .filter(|s| {
+            if let Some(meta) = &s.metadata {
                 meta.get(key) == Some(value)
             } else {
                 false
@@ -368,37 +362,26 @@ fn filter_by_metadata(
 }
 
 fn filter_by_field(
-    images: &[Image],
+    samples: &[Sample],
     column: &str,
     op: &FilterOp,
     value: &serde_json::Value,
-) -> Result<Vec<Image>> {
-    Ok(images
+) -> Result<Vec<Sample>> {
+    Ok(samples
         .iter()
-        .filter(|img| {
-            let img_val = get_image_field_value(img, column);
-            apply_filter_op(&img_val, op, value)
+        .filter(|s| {
+            let sample_val = get_sample_field_value(s, column);
+            apply_filter_op(&sample_val, op, value)
         })
         .cloned()
         .collect())
 }
 
-fn get_image_field_value(img: &Image, column: &str) -> serde_json::Value {
+fn get_sample_field_value(sample: &Sample, column: &str) -> serde_json::Value {
     match column {
-        "id" => serde_json::json!(img.id),
-        "dataset_id" => serde_json::json!(img.dataset_id),
-        "file_name" => serde_json::json!(img.file_name),
-        "file_path" => serde_json::json!(img.file_path.to_string_lossy().as_ref()),
-        "width" => img
-            .width
-            .map_or(serde_json::Value::Null, |w| serde_json::json!(w)),
-        "height" => img
-            .height
-            .map_or(serde_json::Value::Null, |h| serde_json::json!(h)),
-        "hash" => img
-            .hash
-            .as_deref()
-            .map_or(serde_json::Value::Null, |h| serde_json::json!(h)),
+        "id" => serde_json::json!(sample.id),
+        "dataset_id" => serde_json::json!(sample.dataset_id),
+        "name" => serde_json::json!(sample.name),
         _ => serde_json::Value::Null,
     }
 }
@@ -511,15 +494,15 @@ impl VirtualDatasetService {
         Ok(())
     }
 
-    /// Evaluate a virtual dataset, returning all matching images.
-    pub fn evaluate(db: &Database, vds: &VirtualDataset) -> Result<Vec<Image>> {
-        // Load base images from source_datasets
-        let base_images = fetch_images_for_datasets(db, &vds.source_datasets)?;
-        eval_def(db, &vds.definition, &base_images)
+    /// Evaluate a virtual dataset, returning all matching samples.
+    pub fn evaluate(db: &Database, vds: &VirtualDataset) -> Result<Vec<Sample>> {
+        // Load base samples from source_datasets
+        let base_samples = fetch_samples_for_datasets(db, &vds.source_datasets)?;
+        eval_def(db, &vds.definition, &base_samples)
     }
 
-    /// Preview the first `limit` images from evaluating a virtual dataset.
-    pub fn preview(db: &Database, vds: &VirtualDataset, limit: usize) -> Result<Vec<Image>> {
+    /// Preview the first `limit` samples from evaluating a virtual dataset.
+    pub fn preview(db: &Database, vds: &VirtualDataset, limit: usize) -> Result<Vec<Sample>> {
         let all = Self::evaluate(db, vds)?;
         Ok(all.into_iter().take(limit).collect())
     }
@@ -547,14 +530,14 @@ mod tests {
         db.conn.last_insert_rowid()
     }
 
-    /// Insert an image and return its id.
-    fn insert_image(db: &Database, dataset_id: i64, file_name: &str) -> i64 {
+    /// Insert a sample and return its id.
+    fn insert_sample(db: &Database, dataset_id: i64, name: &str) -> i64 {
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                params![dataset_id, file_name, format!("/tmp/{}", file_name)],
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                params![dataset_id, name],
             )
-            .expect("insert image");
+            .expect("insert sample");
         db.conn.last_insert_rowid()
     }
 
@@ -569,12 +552,12 @@ mod tests {
         db.conn.last_insert_rowid()
     }
 
-    /// Insert an annotation for an image with optional category.
-    fn insert_annotation(db: &Database, image_id: i64, category_id: Option<i64>) {
+    /// Insert an annotation for a sample with optional category.
+    fn insert_annotation(db: &Database, sample_id: i64, category_id: Option<i64>) {
         db.conn
             .execute(
-                "INSERT INTO annotations (image_id, category_id) VALUES (?1, ?2)",
-                params![image_id, category_id],
+                "INSERT INTO annotations (sample_id, category_id) VALUES (?1, ?2)",
+                params![sample_id, category_id],
             )
             .expect("insert annotation");
     }
@@ -645,16 +628,16 @@ mod tests {
     fn test_evaluate_source() {
         let db = in_memory_db();
         let ds_id = insert_dataset(&db, "ds1");
-        let _img1 = insert_image(&db, ds_id, "a.jpg");
-        let _img2 = insert_image(&db, ds_id, "b.jpg");
-        let _img3 = insert_image(&db, ds_id, "c.jpg");
+        let _s1 = insert_sample(&db, ds_id, "a.jpg");
+        let _s2 = insert_sample(&db, ds_id, "b.jpg");
+        let _s3 = insert_sample(&db, ds_id, "c.jpg");
 
-        // A simple Sample 100% VDS — should return all source images
+        // A simple Sample 100% VDS — should return all source samples
         let def = VirtualDatasetDef::Sample { ratio: 1.0 };
         let vds = VirtualDatasetService::create(&db, "all-vds", vec![ds_id], &def).expect("create");
 
-        let images = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
-        assert_eq!(images.len(), 3);
+        let samples = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
+        assert_eq!(samples.len(), 3);
     }
 
     // ─── Evaluate: Filter HasAnnotations ───────────────────────────────────
@@ -663,12 +646,12 @@ mod tests {
     fn test_evaluate_filter_has_annotations() {
         let db = in_memory_db();
         let ds_id = insert_dataset(&db, "ds1");
-        let img1 = insert_image(&db, ds_id, "annotated.jpg");
-        let _img2 = insert_image(&db, ds_id, "unannotated.jpg");
-        let img3 = insert_image(&db, ds_id, "also-annotated.jpg");
+        let s1 = insert_sample(&db, ds_id, "annotated.jpg");
+        let _s2 = insert_sample(&db, ds_id, "unannotated.jpg");
+        let s3 = insert_sample(&db, ds_id, "also-annotated.jpg");
 
-        insert_annotation(&db, img1, None);
-        insert_annotation(&db, img3, None);
+        insert_annotation(&db, s1, None);
+        insert_annotation(&db, s3, None);
 
         let def = VirtualDatasetDef::Filter {
             column: "annotated".to_string(),
@@ -678,11 +661,15 @@ mod tests {
         let vds =
             VirtualDatasetService::create(&db, "annotated-vds", vec![ds_id], &def).expect("create");
 
-        let images = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
-        assert_eq!(images.len(), 2, "only annotated images should be returned");
-        let ids: Vec<i64> = images.iter().map(|img| img.id).collect();
-        assert!(ids.contains(&img1));
-        assert!(ids.contains(&img3));
+        let samples = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
+        assert_eq!(
+            samples.len(),
+            2,
+            "only annotated samples should be returned"
+        );
+        let ids: Vec<i64> = samples.iter().map(|s| s.id).collect();
+        assert!(ids.contains(&s1));
+        assert!(ids.contains(&s3));
     }
 
     // ─── Evaluate: Filter by Category ──────────────────────────────────────
@@ -691,15 +678,15 @@ mod tests {
     fn test_evaluate_filter_category() {
         let db = in_memory_db();
         let ds_id = insert_dataset(&db, "ds1");
-        let img1 = insert_image(&db, ds_id, "cat.jpg");
-        let img2 = insert_image(&db, ds_id, "dog.jpg");
-        let _img3 = insert_image(&db, ds_id, "empty.jpg");
+        let s1 = insert_sample(&db, ds_id, "cat.jpg");
+        let s2 = insert_sample(&db, ds_id, "dog.jpg");
+        let _s3 = insert_sample(&db, ds_id, "empty.jpg");
 
         let cat_id = insert_category(&db, ds_id, "cat");
         let dog_id = insert_category(&db, ds_id, "dog");
 
-        insert_annotation(&db, img1, Some(cat_id));
-        insert_annotation(&db, img2, Some(dog_id));
+        insert_annotation(&db, s1, Some(cat_id));
+        insert_annotation(&db, s2, Some(dog_id));
 
         let def = VirtualDatasetDef::Filter {
             column: "category".to_string(),
@@ -708,9 +695,9 @@ mod tests {
         };
         let vds = VirtualDatasetService::create(&db, "cat-vds", vec![ds_id], &def).expect("create");
 
-        let images = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
-        assert_eq!(images.len(), 1, "only cat images");
-        assert_eq!(images[0].id, img1);
+        let samples = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
+        assert_eq!(samples.len(), 1, "only cat samples");
+        assert_eq!(samples[0].id, s1);
     }
 
     // ─── Evaluate: Merge ───────────────────────────────────────────────────
@@ -721,9 +708,9 @@ mod tests {
         let ds1_id = insert_dataset(&db, "ds1");
         let ds2_id = insert_dataset(&db, "ds2");
 
-        let _img1 = insert_image(&db, ds1_id, "from-ds1.jpg");
-        let _img2 = insert_image(&db, ds2_id, "from-ds2.jpg");
-        let _img3 = insert_image(&db, ds2_id, "also-ds2.jpg");
+        let _s1 = insert_sample(&db, ds1_id, "from-ds1.jpg");
+        let _s2 = insert_sample(&db, ds2_id, "from-ds2.jpg");
+        let _s3 = insert_sample(&db, ds2_id, "also-ds2.jpg");
 
         // source_datasets=[ds1_id], Merge with ds2_id
         let def = VirtualDatasetDef::Merge {
@@ -732,14 +719,14 @@ mod tests {
         let vds =
             VirtualDatasetService::create(&db, "merged-vds", vec![ds1_id], &def).expect("create");
 
-        let images = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
+        let samples = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
         assert_eq!(
-            images.len(),
+            samples.len(),
             3,
-            "images from both datasets should be present"
+            "samples from both datasets should be present"
         );
 
-        let dataset_ids: HashSet<i64> = images.iter().map(|img| img.dataset_id).collect();
+        let dataset_ids: HashSet<i64> = samples.iter().map(|s| s.dataset_id).collect();
         assert!(dataset_ids.contains(&ds1_id));
         assert!(dataset_ids.contains(&ds2_id));
     }
@@ -750,18 +737,18 @@ mod tests {
     fn test_evaluate_sample() {
         let db = in_memory_db();
         let ds_id = insert_dataset(&db, "ds1");
-        // Insert 10 images
+        // Insert 10 samples
         for i in 0..10 {
-            insert_image(&db, ds_id, &format!("img{:02}.jpg", i));
+            insert_sample(&db, ds_id, &format!("img{:02}.jpg", i));
         }
 
         let def = VirtualDatasetDef::Sample { ratio: 0.5 };
         let vds =
             VirtualDatasetService::create(&db, "sample-vds", vec![ds_id], &def).expect("create");
 
-        let images = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
-        // ~50% = 5 images (rounding)
-        assert_eq!(images.len(), 5, "sample 50% of 10 = 5");
+        let samples = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
+        // ~50% = 5 samples (rounding)
+        assert_eq!(samples.len(), 5, "sample 50% of 10 = 5");
     }
 
     // ─── Evaluate: Chain ───────────────────────────────────────────────────
@@ -771,13 +758,13 @@ mod tests {
         let db = in_memory_db();
         let ds_id = insert_dataset(&db, "ds1");
 
-        // 10 images, 6 annotated
+        // 10 samples, 6 annotated
         let mut annotated_ids = vec![];
         for i in 0..10 {
-            let img_id = insert_image(&db, ds_id, &format!("img{:02}.jpg", i));
+            let s_id = insert_sample(&db, ds_id, &format!("img{:02}.jpg", i));
             if i < 6 {
-                insert_annotation(&db, img_id, None);
-                annotated_ids.push(img_id);
+                insert_annotation(&db, s_id, None);
+                annotated_ids.push(s_id);
             }
         }
 
@@ -792,15 +779,19 @@ mod tests {
         let vds =
             VirtualDatasetService::create(&db, "chain-vds", vec![ds_id], &def).expect("create");
 
-        let images = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
+        let samples = VirtualDatasetService::evaluate(&db, &vds).expect("evaluate");
         // 6 annotated * 50% = 3
-        assert_eq!(images.len(), 3, "chain: filter(annotated) then sample(50%)");
-        // All returned images must be annotated
-        let returned_ids: HashSet<i64> = images.iter().map(|img| img.id).collect();
+        assert_eq!(
+            samples.len(),
+            3,
+            "chain: filter(annotated) then sample(50%)"
+        );
+        // All returned samples must be annotated
+        let returned_ids: HashSet<i64> = samples.iter().map(|s| s.id).collect();
         for id in &returned_ids {
             assert!(
                 annotated_ids.contains(id),
-                "non-annotated image in result: {}",
+                "non-annotated sample in result: {}",
                 id
             );
         }
@@ -813,15 +804,15 @@ mod tests {
         let db = in_memory_db();
         let ds_id = insert_dataset(&db, "ds1");
         for i in 0..10 {
-            insert_image(&db, ds_id, &format!("img{:02}.jpg", i));
+            insert_sample(&db, ds_id, &format!("img{:02}.jpg", i));
         }
 
         let def = VirtualDatasetDef::Sample { ratio: 1.0 };
         let vds =
             VirtualDatasetService::create(&db, "preview-vds", vec![ds_id], &def).expect("create");
 
-        let images = VirtualDatasetService::preview(&db, &vds, 3).expect("preview");
-        assert_eq!(images.len(), 3);
+        let samples = VirtualDatasetService::preview(&db, &vds, 3).expect("preview");
+        assert_eq!(samples.len(), 3);
     }
 
     // ─── Circular reference detection ──────────────────────────────────────

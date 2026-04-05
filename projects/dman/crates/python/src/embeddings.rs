@@ -20,7 +20,7 @@ pub fn compute_embeddings(
     use pyo3::prelude::*;
     use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods};
 
-    struct ImageRow {
+    struct AssetRow {
         id: i64,
         file_path: String,
     }
@@ -35,14 +35,20 @@ pub fn compute_embeddings(
     let file_c = CString::new(path_str).map_err(|e| DmanError::PluginError(e.to_string()))?;
     let mod_c = CString::new(path_str).map_err(|e| DmanError::PluginError(e.to_string()))?;
 
-    let images: Vec<ImageRow> = {
+    let images: Vec<AssetRow> = {
         let mut stmt = db
             .conn
-            .prepare("SELECT id, file_path FROM images WHERE dataset_id = ?1 ORDER BY id")
+            .prepare(
+                "SELECT a.id, a.file_path \
+                 FROM assets a \
+                 JOIN samples s ON a.sample_id = s.id \
+                 WHERE s.dataset_id = ?1 AND a.asset_type = 'image' \
+                 ORDER BY a.id",
+            )
             .map_err(DmanError::Database)?;
 
         stmt.query_map(rusqlite::params![dataset_id], |row| {
-            Ok(ImageRow {
+            Ok(AssetRow {
                 id: row.get(0)?,
                 file_path: row.get(1)?,
             })
@@ -115,11 +121,11 @@ pub fn compute_embeddings(
                 )));
             }
 
-            for (image, item) in chunk.iter().zip(vectors.iter()) {
+            for (asset, item) in chunk.iter().zip(vectors.iter()) {
                 let vector: Vec<f32> = item
                     .extract()
                     .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
-                EmbeddingService::store(db, image.id, &model_name, &vector)?;
+                EmbeddingService::store(db, asset.id, &model_name, &vector)?;
                 total_stored += 1;
             }
         }
@@ -151,14 +157,21 @@ mod tests {
         for idx in 0..image_count {
             db.conn
                 .execute(
-                    "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
+                    "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                    rusqlite::params![dataset_id, format!("img-{idx:03}")],
+                )
+                .expect("insert sample");
+            let sample_id = db.conn.last_insert_rowid();
+            db.conn
+                .execute(
+                    "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', ?2, ?3)",
                     rusqlite::params![
-                        dataset_id,
+                        sample_id,
                         format!("img-{idx:03}.jpg"),
                         format!("/tmp/img-{idx:03}.jpg")
                     ],
                 )
-                .expect("insert image");
+                .expect("insert asset");
         }
 
         (db, dataset_id)
@@ -190,11 +203,15 @@ def compute(image_paths):
         let embeddings =
             EmbeddingService::list_by_dataset(&db, dataset_id).expect("list embeddings");
         assert_eq!(embeddings.len(), 10);
-        assert!(embeddings
-            .iter()
-            .all(|embedding| embedding.vector.len() == 4));
-        assert!(embeddings
-            .iter()
-            .all(|embedding| embedding.model_name == "test-embed-model"));
+        assert!(
+            embeddings
+                .iter()
+                .all(|embedding| embedding.vector.len() == 4)
+        );
+        assert!(
+            embeddings
+                .iter()
+                .all(|embedding| embedding.model_name == "test-embed-model")
+        );
     }
 }

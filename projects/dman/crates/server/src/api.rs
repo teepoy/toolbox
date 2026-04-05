@@ -9,10 +9,7 @@ use axum::{
     response::IntoResponse,
 };
 use dman_core::{
-    Image, Annotation, Category,
-    dataset::DatasetService,
-    db::Database,
-    error::DmanError,
+    Annotation, Asset, Category, dataset::DatasetService, db::Database, error::DmanError,
     virtual_dataset::VirtualDatasetService,
 };
 use rusqlite::params;
@@ -36,8 +33,12 @@ pub struct PaginationParams {
     pub per_page: usize,
 }
 
-fn default_page() -> usize { 1 }
-fn default_per_page() -> usize { 50 }
+fn default_page() -> usize {
+    1
+}
+fn default_per_page() -> usize {
+    50
+}
 
 #[derive(Debug, Serialize)]
 pub struct Pagination {
@@ -52,7 +53,11 @@ fn paginate<T>(items: Vec<T>, page: usize, per_page: usize) -> (Vec<T>, Paginati
     let per_page = per_page.clamp(1, 500);
     let offset = (page - 1) * per_page;
     let data = items.into_iter().skip(offset).take(per_page).collect();
-    let pagination = Pagination { page, per_page, total };
+    let pagination = Pagination {
+        page,
+        per_page,
+        total,
+    };
     (data, pagination)
 }
 
@@ -63,7 +68,10 @@ fn api_ok<T: Serialize>(data: T) -> impl IntoResponse {
 }
 
 fn api_paged<T: Serialize>(data: T, pagination: Pagination) -> impl IntoResponse {
-    (StatusCode::OK, Json(json!({ "data": data, "pagination": pagination })))
+    (
+        StatusCode::OK,
+        Json(json!({ "data": data, "pagination": pagination })),
+    )
 }
 
 fn api_error(code: &str, message: impl Into<String>) -> (StatusCode, Json<Value>) {
@@ -71,7 +79,10 @@ fn api_error(code: &str, message: impl Into<String>) -> (StatusCode, Json<Value>
         "NOT_FOUND" => StatusCode::NOT_FOUND,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
-    (status, Json(json!({ "error": { "code": code, "message": message.into() } })))
+    (
+        status,
+        Json(json!({ "error": { "code": code, "message": message.into() } })),
+    )
 }
 
 fn open_db(catalog_path: &StdPath) -> Result<Database, (StatusCode, Json<Value>)> {
@@ -81,7 +92,9 @@ fn open_db(catalog_path: &StdPath) -> Result<Database, (StatusCode, Json<Value>)
 
 fn handle_dman_err(e: DmanError) -> (StatusCode, Json<Value>) {
     match &e {
-        DmanError::DatasetNotFound(msg) => api_error("NOT_FOUND", format!("Dataset '{}' not found", msg)),
+        DmanError::DatasetNotFound(msg) => {
+            api_error("NOT_FOUND", format!("Dataset '{}' not found", msg))
+        }
         _ => api_error("INTERNAL_ERROR", e.to_string()),
     }
 }
@@ -123,8 +136,8 @@ pub async fn get_dataset(
     }
 }
 
-/// GET /api/datasets/{name}/images?category=X&page=1&per_page=50
-pub async fn list_images(
+/// GET /api/datasets/{name}/samples?category=X&page=1&per_page=50
+pub async fn list_samples(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Query(query): Query<HashMap<String, String>>,
@@ -144,21 +157,24 @@ pub async fn list_images(
 
     let category_filter = query.get("category").cloned();
     let page: usize = query.get("page").and_then(|v| v.parse().ok()).unwrap_or(1);
-    let per_page: usize = query.get("per_page").and_then(|v| v.parse().ok()).unwrap_or(50);
+    let per_page: usize = query
+        .get("per_page")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(50);
 
-    let images = match fetch_images_for_dataset(&db, ds.id, category_filter.as_deref()) {
+    let samples = match fetch_assets_for_dataset(&db, ds.id, category_filter.as_deref()) {
         Ok(v) => v,
         Err(e) => return handle_dman_err(e).into_response(),
     };
 
-    let (page_data, pagination) = paginate(images, page, per_page);
+    let (page_data, pagination) = paginate(samples, page, per_page);
     api_paged(page_data, pagination).into_response()
 }
 
-/// GET /api/datasets/{name}/images/{id}
-pub async fn get_image(
+/// GET /api/datasets/{name}/assets/{id}
+pub async fn get_asset(
     State(state): State<Arc<AppState>>,
-    Path((name, image_id)): Path<(String, i64)>,
+    Path((name, asset_id)): Path<(String, i64)>,
 ) -> impl IntoResponse {
     let db = match open_db(&state.catalog_path) {
         Ok(d) => d,
@@ -174,31 +190,34 @@ pub async fn get_image(
         Err(e) => return handle_dman_err(e).into_response(),
     };
 
-    // Fetch image, ensure it belongs to this dataset
-    let img = match db.conn.query_row(
-        "SELECT id, dataset_id, file_name, file_path, width, height, hash, metadata \
-         FROM images WHERE id = ?1 AND dataset_id = ?2",
-        params![image_id, ds.id],
-        row_to_image,
+    // Fetch asset, ensure it belongs to this dataset via sample
+    let asset = match db.conn.query_row(
+        "SELECT a.id, a.sample_id, a.asset_type, a.file_name, a.file_path, \
+                a.width, a.height, a.hash, a.metadata \
+         FROM assets a \
+         JOIN samples s ON s.id = a.sample_id \
+         WHERE a.id = ?1 AND s.dataset_id = ?2",
+        params![asset_id, ds.id],
+        row_to_asset,
     ) {
-        Ok(img) => img,
+        Ok(a) => a,
         Err(rusqlite::Error::QueryReturnedNoRows) => {
             return api_error(
                 "NOT_FOUND",
-                format!("Image {} not found in dataset '{}'", image_id, name),
+                format!("Asset {} not found in dataset '{}'", asset_id, name),
             )
             .into_response();
         }
         Err(e) => return handle_dman_err(DmanError::Database(e)).into_response(),
     };
 
-    // Fetch annotations
-    let annotations = match fetch_annotations_for_image(&db, image_id) {
+    // Fetch annotations for this asset's sample
+    let annotations = match fetch_annotations_for_sample(&db, asset.sample_id) {
         Ok(v) => v,
         Err(e) => return handle_dman_err(e).into_response(),
     };
 
-    api_ok(json!({ "image": img, "annotations": annotations })).into_response()
+    api_ok(json!({ "asset": asset, "annotations": annotations })).into_response()
 }
 
 /// GET /api/datasets/{name}/categories
@@ -255,9 +274,10 @@ pub async fn get_dataset_stats(
     match DatasetService::inspect(&db, &name) {
         Ok(info) => {
             let stats = json!({
-                "image_count": info.image_count,
+                "sample_count": info.sample_count,
+                "asset_count": info.asset_count,
                 "annotation_count": info.annotation_count,
-                "categories": info.categories,
+                "category_count": info.category_count,
             });
             api_ok(stats).into_response()
         }
@@ -307,45 +327,49 @@ pub async fn get_virtual_dataset(
 
 // ─── DB query helpers ─────────────────────────────────────────────────────────
 
-fn row_to_image(row: &rusqlite::Row<'_>) -> rusqlite::Result<Image> {
+fn row_to_asset(row: &rusqlite::Row<'_>) -> rusqlite::Result<Asset> {
+    use dman_core::types::AssetType;
     use std::path::PathBuf;
-    let metadata_str: Option<String> = row.get(7)?;
+    let asset_type_str: String = row.get(2)?;
+    let metadata_str: Option<String> = row.get(8)?;
     let metadata = metadata_str
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
-    Ok(Image {
+    Ok(Asset {
         id: row.get(0)?,
-        dataset_id: row.get(1)?,
-        file_name: row.get(2)?,
-        file_path: PathBuf::from(row.get::<_, String>(3)?),
-        width: row.get(4)?,
-        height: row.get(5)?,
-        hash: row.get(6)?,
+        sample_id: row.get(1)?,
+        asset_type: asset_type_str
+            .parse()
+            .unwrap_or(AssetType::Other(asset_type_str.clone())),
+        file_name: row.get(3)?,
+        file_path: PathBuf::from(row.get::<_, String>(4)?),
+        width: row.get(5)?,
+        height: row.get(6)?,
+        hash: row.get(7)?,
         metadata,
     })
 }
 
 fn row_to_annotation(row: &rusqlite::Row<'_>) -> rusqlite::Result<Annotation> {
-    let bbox_str: Option<String> = row.get(3)?;
+    let bbox_str: Option<String> = row.get(4)?;
     let bbox = bbox_str
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
-    let seg_str: Option<String> = row.get(4)?;
+    let seg_str: Option<String> = row.get(5)?;
     let segmentation = seg_str
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
-    let kp_str: Option<String> = row.get(5)?;
-    let keypoints = kp_str
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok());
-    let meta_str: Option<String> = row.get(6)?;
+    let kp_str: Option<String> = row.get(6)?;
+    let keypoints = kp_str.as_deref().and_then(|s| serde_json::from_str(s).ok());
+    let meta_str: Option<String> = row.get(7)?;
     let metadata = meta_str
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
     Ok(Annotation {
         id: row.get(0)?,
-        image_id: row.get(1)?,
-        category_id: row.get(2)?,
+        sample_id: row.get(1)?,
+        asset_id: row.get(2)?,
+        category_id: row.get(3)?,
         bbox,
         segmentation,
         keypoints,
@@ -353,50 +377,55 @@ fn row_to_annotation(row: &rusqlite::Row<'_>) -> rusqlite::Result<Annotation> {
     })
 }
 
-fn fetch_images_for_dataset(
+fn fetch_assets_for_dataset(
     db: &Database,
     dataset_id: i64,
     category: Option<&str>,
-) -> dman_core::Result<Vec<Image>> {
+) -> dman_core::Result<Vec<Asset>> {
     match category {
         None => {
             let mut stmt = db.conn.prepare(
-                "SELECT id, dataset_id, file_name, file_path, width, height, hash, metadata \
-                 FROM images WHERE dataset_id = ?1 ORDER BY id",
+                "SELECT a.id, a.sample_id, a.asset_type, a.file_name, a.file_path, \
+                        a.width, a.height, a.hash, a.metadata \
+                 FROM assets a \
+                 JOIN samples s ON s.id = a.sample_id \
+                 WHERE s.dataset_id = ?1 \
+                 ORDER BY a.id",
             )?;
-            let images = stmt
-                .query_map(params![dataset_id], row_to_image)?
+            let assets = stmt
+                .query_map(params![dataset_id], row_to_asset)?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            Ok(images)
+            Ok(assets)
         }
         Some(cat) => {
-            // Filter images that have at least one annotation with this category name
             let mut stmt = db.conn.prepare(
-                "SELECT DISTINCT i.id, i.dataset_id, i.file_name, i.file_path, i.width, i.height, i.hash, i.metadata \
-                 FROM images i \
-                 JOIN annotations a ON a.image_id = i.id \
-                 JOIN categories c ON c.id = a.category_id \
-                 WHERE i.dataset_id = ?1 AND c.name = ?2 \
-                 ORDER BY i.id",
+                "SELECT DISTINCT a.id, a.sample_id, a.asset_type, a.file_name, a.file_path, \
+                        a.width, a.height, a.hash, a.metadata \
+                 FROM assets a \
+                 JOIN samples s ON s.id = a.sample_id \
+                 JOIN annotations ann ON ann.sample_id = s.id \
+                 JOIN categories c ON c.id = ann.category_id \
+                 WHERE s.dataset_id = ?1 AND c.name = ?2 \
+                 ORDER BY a.id",
             )?;
-            let images = stmt
-                .query_map(params![dataset_id, cat], row_to_image)?
+            let assets = stmt
+                .query_map(params![dataset_id, cat], row_to_asset)?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            Ok(images)
+            Ok(assets)
         }
     }
 }
 
-fn fetch_annotations_for_image(
+fn fetch_annotations_for_sample(
     db: &Database,
-    image_id: i64,
+    sample_id: i64,
 ) -> dman_core::Result<Vec<Annotation>> {
     let mut stmt = db.conn.prepare(
-        "SELECT id, image_id, category_id, bbox, segmentation, keypoints, metadata \
-         FROM annotations WHERE image_id = ?1 ORDER BY id",
+        "SELECT id, sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata \
+         FROM annotations WHERE sample_id = ?1 ORDER BY id",
     )?;
     let annotations = stmt
-        .query_map(params![image_id], row_to_annotation)?
+        .query_map(params![sample_id], row_to_annotation)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(annotations)
 }
@@ -412,11 +441,11 @@ mod tests {
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use axum::routing::get;
-    use dman_core::db::Database;
     use dman_core::dataset::DatasetService;
+    use dman_core::db::Database;
     use dman_core::types::DatasetFormat;
-    use dman_core::virtual_dataset::VirtualDatasetService;
     use dman_core::types::VirtualDatasetDef;
+    use dman_core::virtual_dataset::VirtualDatasetService;
     use rusqlite::params;
     use tempfile::tempdir;
     use tower::ServiceExt;
@@ -436,8 +465,8 @@ mod tests {
         Router::new()
             .route("/api/datasets", get(list_datasets))
             .route("/api/datasets/{name}", get(get_dataset))
-            .route("/api/datasets/{name}/images", get(list_images))
-            .route("/api/datasets/{name}/images/{id}", get(get_image))
+            .route("/api/datasets/{name}/samples", get(list_samples))
+            .route("/api/datasets/{name}/assets/{id}", get(get_asset))
             .route("/api/datasets/{name}/categories", get(list_categories))
             .route("/api/datasets/{name}/stats", get(get_dataset_stats))
             .route("/api/virtual-datasets", get(list_virtual_datasets))
@@ -479,7 +508,7 @@ mod tests {
 
         // Register a dataset
         let db = Database::open(catalog.join("catalog.db")).unwrap();
-        DatasetService::register(&db, "my-dataset", &ds_dir, DatasetFormat::Yolo).unwrap();
+        DatasetService::register(&db, "my-dataset", &ds_dir, DatasetFormat::yolo()).unwrap();
         drop(db);
 
         let app = make_router(catalog);
@@ -515,43 +544,64 @@ mod tests {
         assert_eq!(json["error"]["code"], "NOT_FOUND");
     }
 
-    // ─── Test 4: list_images with category filter ─────────────────────────────
+    // ─── Test 4: list_samples with category filter ────────────────────────────
     #[tokio::test]
-    async fn api_list_images_category_filter() {
+    async fn api_list_samples_category_filter() {
         let tmp = tempdir().unwrap();
         let catalog = setup_catalog(&tmp);
         let ds_dir = tmp.path().join("filterds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
         let db = Database::open(catalog.join("catalog.db")).unwrap();
-        let ds = DatasetService::register(&db, "filter-ds", &ds_dir, DatasetFormat::Coco).unwrap();
+        let ds =
+            DatasetService::register(&db, "filter-ds", &ds_dir, DatasetFormat::coco()).unwrap();
         let dataset_id = ds.id;
 
-        // Insert images
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'cat.jpg', '/tmp/cat.jpg')",
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 'sample-cat')",
                 params![dataset_id],
             )
             .unwrap();
-        let img1_id = db.conn.last_insert_rowid();
+        let sample1_id = db.conn.last_insert_rowid();
 
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'dog.jpg', '/tmp/dog.jpg')",
-                params![dataset_id],
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'Image', 'cat.jpg', '/tmp/cat.jpg')",
+                params![sample1_id],
             )
             .unwrap();
-        let img2_id = db.conn.last_insert_rowid();
 
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'empty.jpg', '/tmp/empty.jpg')",
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 'sample-dog')",
                 params![dataset_id],
             )
             .unwrap();
+        let sample2_id = db.conn.last_insert_rowid();
 
-        // Insert categories and annotations
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'Image', 'dog.jpg', '/tmp/dog.jpg')",
+                params![sample2_id],
+            )
+            .unwrap();
+
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 'sample-empty')",
+                params![dataset_id],
+            )
+            .unwrap();
+        let sample3_id = db.conn.last_insert_rowid();
+
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'Image', 'empty.jpg', '/tmp/empty.jpg')",
+                params![sample3_id],
+            )
+            .unwrap();
+
         db.conn
             .execute(
                 "INSERT INTO categories (dataset_id, name) VALUES (?1, 'cat')",
@@ -570,14 +620,14 @@ mod tests {
 
         db.conn
             .execute(
-                "INSERT INTO annotations (image_id, category_id) VALUES (?1, ?2)",
-                params![img1_id, cat_id],
+                "INSERT INTO annotations (sample_id, category_id) VALUES (?1, ?2)",
+                params![sample1_id, cat_id],
             )
             .unwrap();
         db.conn
             .execute(
-                "INSERT INTO annotations (image_id, category_id) VALUES (?1, ?2)",
-                params![img2_id, dog_id],
+                "INSERT INTO annotations (sample_id, category_id) VALUES (?1, ?2)",
+                params![sample2_id, dog_id],
             )
             .unwrap();
         drop(db);
@@ -585,7 +635,7 @@ mod tests {
         let app = make_router(catalog);
         let resp = app
             .oneshot(
-                Request::get("/api/datasets/filter-ds/images?category=cat")
+                Request::get("/api/datasets/filter-ds/samples?category=cat")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -598,23 +648,35 @@ mod tests {
         assert_eq!(json["data"][0]["file_name"], "cat.jpg");
     }
 
-    // ─── Test 5: list_images no filter returns all ────────────────────────────
+    // ─── Test 5: list_samples no filter returns all ───────────────────────────
     #[tokio::test]
-    async fn api_list_images_no_filter() {
+    async fn api_list_samples_no_filter() {
         let tmp = tempdir().unwrap();
         let catalog = setup_catalog(&tmp);
         let ds_dir = tmp.path().join("allimgds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
         let db = Database::open(catalog.join("catalog.db")).unwrap();
-        let ds = DatasetService::register(&db, "all-img-ds", &ds_dir, DatasetFormat::Yolo).unwrap();
+        let ds =
+            DatasetService::register(&db, "all-img-ds", &ds_dir, DatasetFormat::yolo()).unwrap();
         let dataset_id = ds.id;
 
         for i in 0..3 {
             db.conn
                 .execute(
-                    "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                    params![dataset_id, format!("img{}.jpg", i), format!("/tmp/img{}.jpg", i)],
+                    "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                    params![dataset_id, format!("sample-{}", i)],
+                )
+                .unwrap();
+            let sample_id = db.conn.last_insert_rowid();
+            db.conn
+                .execute(
+                    "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'Image', ?2, ?3)",
+                    params![
+                        sample_id,
+                        format!("img{}.jpg", i),
+                        format!("/tmp/img{}.jpg", i)
+                    ],
                 )
                 .unwrap();
         }
@@ -623,7 +685,7 @@ mod tests {
         let app = make_router(catalog);
         let resp = app
             .oneshot(
-                Request::get("/api/datasets/all-img-ds/images")
+                Request::get("/api/datasets/all-img-ds/samples")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -635,16 +697,16 @@ mod tests {
         assert_eq!(json["pagination"]["total"], 3);
     }
 
-    // ─── Test 6: list_images for nonexistent dataset returns 404 ─────────────
+    // ─── Test 6: list_samples for nonexistent dataset returns 404 ────────────
     #[tokio::test]
-    async fn api_list_images_dataset_not_found() {
+    async fn api_list_samples_dataset_not_found() {
         let tmp = tempdir().unwrap();
         let catalog = setup_catalog(&tmp);
         let app = make_router(catalog);
 
         let resp = app
             .oneshot(
-                Request::get("/api/datasets/ghost/images")
+                Request::get("/api/datasets/ghost/samples")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -665,7 +727,7 @@ mod tests {
         std::fs::create_dir_all(&ds_dir).unwrap();
 
         let db = Database::open(catalog.join("catalog.db")).unwrap();
-        let ds = DatasetService::register(&db, "cat-ds", &ds_dir, DatasetFormat::Coco).unwrap();
+        let ds = DatasetService::register(&db, "cat-ds", &ds_dir, DatasetFormat::coco()).unwrap();
         db.conn
             .execute(
                 "INSERT INTO categories (dataset_id, name, supercategory) VALUES (?1, 'cat', 'animal')",
@@ -708,16 +770,23 @@ mod tests {
         std::fs::create_dir_all(&ds_dir).unwrap();
 
         let db = Database::open(catalog.join("catalog.db")).unwrap();
-        let ds = DatasetService::register(&db, "stats-ds", &ds_dir, DatasetFormat::Yolo).unwrap();
+        let ds = DatasetService::register(&db, "stats-ds", &ds_dir, DatasetFormat::yolo()).unwrap();
         let dataset_id = ds.id;
 
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'a.jpg', '/tmp/a.jpg')",
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 'sample-a')",
                 params![dataset_id],
             )
             .unwrap();
-        let img_id = db.conn.last_insert_rowid();
+        let sample_id = db.conn.last_insert_rowid();
+
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'Image', 'a.jpg', '/tmp/a.jpg')",
+                params![sample_id],
+            )
+            .unwrap();
 
         db.conn
             .execute(
@@ -728,8 +797,8 @@ mod tests {
 
         db.conn
             .execute(
-                "INSERT INTO annotations (image_id) VALUES (?1)",
-                params![img_id],
+                "INSERT INTO annotations (sample_id) VALUES (?1)",
+                params![sample_id],
             )
             .unwrap();
         drop(db);
@@ -746,9 +815,10 @@ mod tests {
 
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
-        assert_eq!(json["data"]["image_count"], 1);
+        assert_eq!(json["data"]["sample_count"], 1);
+        assert_eq!(json["data"]["asset_count"], 1);
         assert_eq!(json["data"]["annotation_count"], 1);
-        assert_eq!(json["data"]["categories"].as_array().unwrap().len(), 1);
+        assert_eq!(json["data"]["category_count"], 1);
     }
 
     // ─── Test 9: list_virtual_datasets empty ─────────────────────────────────
@@ -828,22 +898,22 @@ mod tests {
         assert_eq!(json["data"]["name"], "my-vds");
     }
 
-    // ─── Test 12: get_image 404 ───────────────────────────────────────────────
+    // ─── Test 12: get_asset 404 ───────────────────────────────────────────────
     #[tokio::test]
-    async fn api_get_image_not_found() {
+    async fn api_get_asset_not_found() {
         let tmp = tempdir().unwrap();
         let catalog = setup_catalog(&tmp);
         let ds_dir = tmp.path().join("imgds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
         let db = Database::open(catalog.join("catalog.db")).unwrap();
-        DatasetService::register(&db, "img-ds", &ds_dir, DatasetFormat::Yolo).unwrap();
+        DatasetService::register(&db, "img-ds", &ds_dir, DatasetFormat::yolo()).unwrap();
         drop(db);
 
         let app = make_router(catalog);
         let resp = app
             .oneshot(
-                Request::get("/api/datasets/img-ds/images/9999")
+                Request::get("/api/datasets/img-ds/assets/9999")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -863,7 +933,7 @@ mod tests {
 
         let db = Database::open(catalog.join("catalog.db")).unwrap();
         for i in 0..5 {
-            DatasetService::register(&db, &format!("ds-{}", i), &ds_dir, DatasetFormat::Yolo)
+            DatasetService::register(&db, &format!("ds-{}", i), &ds_dir, DatasetFormat::yolo())
                 .unwrap();
         }
         drop(db);

@@ -152,7 +152,7 @@ fn parquet_import_yolo_export_reimport_image_count_matches() {
 
     let original_img_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+        "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
         original_ds.id,
     );
 
@@ -196,7 +196,7 @@ fn parquet_import_hf_export_roundtrip_row_count() {
 
     let original_img_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+        "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
         original_ds.id,
     );
 
@@ -242,8 +242,8 @@ fn parquet_import_yolo_export_no_annotations_graceful() {
 
     let ann_count = count_query(
         &db,
-        "SELECT COUNT(*) FROM annotations WHERE image_id IN \
-         (SELECT id FROM images WHERE dataset_id = ?1)",
+        "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+         (SELECT id FROM samples WHERE dataset_id = ?1)",
         dataset.id,
     );
     assert_eq!(

@@ -6,6 +6,20 @@ fn dman() -> Command {
     Command::cargo_bin("dman-cli").expect("dman-cli binary must exist")
 }
 
+fn add_with_format(home: &std::path::Path, name: &str, path: &std::path::Path, format: &str) {
+    dman()
+        .args([
+            "add",
+            name,
+            path.to_str().expect("utf8"),
+            "--format",
+            format,
+        ])
+        .env("DMAN_HOME", home)
+        .assert()
+        .success();
+}
+
 // ── init ──────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -62,7 +76,13 @@ fn add_registers_dataset_successfully() {
         .success();
 
     dman()
-        .args(["add", "my-dataset", ds_path.path().to_str().expect("utf8")])
+        .args([
+            "add",
+            "my-dataset",
+            ds_path.path().to_str().expect("utf8"),
+            "--format",
+            "builder",
+        ])
         .env("DMAN_HOME", home.path())
         .assert()
         .success()
@@ -101,7 +121,13 @@ fn add_without_init_fails() {
     let ds_path = tempdir().expect("ds tempdir");
 
     dman()
-        .args(["add", "my-dataset", ds_path.path().to_str().expect("utf8")])
+        .args([
+            "add",
+            "my-dataset",
+            ds_path.path().to_str().expect("utf8"),
+            "--format",
+            "builder",
+        ])
         .env("DMAN_HOME", home.path())
         .assert()
         .failure();
@@ -118,7 +144,13 @@ fn add_nonexistent_path_fails() {
         .success();
 
     dman()
-        .args(["add", "ghost-ds", "/nonexistent/path/that/does/not/exist"])
+        .args([
+            "add",
+            "ghost-ds",
+            "/nonexistent/path/that/does/not/exist",
+            "--format",
+            "builder",
+        ])
         .env("DMAN_HOME", home.path())
         .assert()
         .failure();
@@ -155,11 +187,7 @@ fn list_shows_added_dataset() {
         .assert()
         .success();
 
-    dman()
-        .args(["add", "listed-ds", ds_path.path().to_str().expect("utf8")])
-        .env("DMAN_HOME", home.path())
-        .assert()
-        .success();
+    add_with_format(home.path(), "listed-ds", ds_path.path(), "builder");
 
     dman()
         .arg("list")
@@ -180,11 +208,7 @@ fn list_json_format_is_valid_json() {
         .assert()
         .success();
 
-    dman()
-        .args(["add", "json-ds", ds_path.path().to_str().expect("utf8")])
-        .env("DMAN_HOME", home.path())
-        .assert()
-        .success();
+    add_with_format(home.path(), "json-ds", ds_path.path(), "builder");
 
     let output = dman()
         .args(["list", "--format", "json"])
@@ -212,17 +236,9 @@ fn list_table_shows_count() {
         .assert()
         .success();
 
-    dman()
-        .args(["add", "alpha", ds1.path().to_str().expect("utf8")])
-        .env("DMAN_HOME", home.path())
-        .assert()
-        .success();
+    add_with_format(home.path(), "alpha", ds1.path(), "builder");
 
-    dman()
-        .args(["add", "beta", ds2.path().to_str().expect("utf8")])
-        .env("DMAN_HOME", home.path())
-        .assert()
-        .success();
+    add_with_format(home.path(), "beta", ds2.path(), "builder");
 
     dman()
         .arg("list")
@@ -247,11 +263,7 @@ fn inspect_shows_dataset_details() {
         .assert()
         .success();
 
-    dman()
-        .args(["add", "inspect-me", ds_path.path().to_str().expect("utf8")])
-        .env("DMAN_HOME", home.path())
-        .assert()
-        .success();
+    add_with_format(home.path(), "inspect-me", ds_path.path(), "builder");
 
     dman()
         .args(["inspect", "inspect-me"])
@@ -291,11 +303,7 @@ fn remove_with_yes_flag_removes_dataset() {
         .assert()
         .success();
 
-    dman()
-        .args(["add", "to-remove", ds_path.path().to_str().expect("utf8")])
-        .env("DMAN_HOME", home.path())
-        .assert()
-        .success();
+    add_with_format(home.path(), "to-remove", ds_path.path(), "builder");
 
     dman()
         .args(["remove", "to-remove", "--yes"])
@@ -341,11 +349,7 @@ fn remove_abort_via_stdin_n_keeps_dataset() {
         .assert()
         .success();
 
-    dman()
-        .args(["add", "keep-me", ds_path.path().to_str().expect("utf8")])
-        .env("DMAN_HOME", home.path())
-        .assert()
-        .success();
+    add_with_format(home.path(), "keep-me", ds_path.path(), "builder");
 
     dman()
         .args(["remove", "keep-me"])
@@ -384,6 +388,8 @@ fn full_lifecycle_init_add_inspect_remove() {
             "add",
             "lifecycle-ds",
             ds_path.path().to_str().expect("utf8"),
+            "--format",
+            "builder",
         ])
         .env("DMAN_HOME", home.path())
         .assert()

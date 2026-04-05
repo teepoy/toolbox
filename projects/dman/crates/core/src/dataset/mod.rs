@@ -1,38 +1,22 @@
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use rusqlite::params;
 
 use crate::{
     db::Database,
     error::{DmanError, Result},
-    types::{Category, Dataset, DatasetFormat},
+    types::{Annotation, Asset, AssetType, Category, Dataset, DatasetFormat, Sample},
 };
 
 #[derive(Debug, Clone)]
 pub struct DatasetInfo {
     pub dataset: Dataset,
-    pub image_count: u64,
+    pub sample_count: u64,
+    pub asset_count: u64,
     pub annotation_count: u64,
-    pub categories: Vec<Category>,
+    pub category_count: u64,
     pub disk_size_bytes: u64,
-}
-
-fn format_from_str(s: &str) -> DatasetFormat {
-    match s {
-        "Yolo" => DatasetFormat::Yolo,
-        "Coco" => DatasetFormat::Coco,
-        "HuggingFace" => DatasetFormat::HuggingFace,
-        other => DatasetFormat::Custom(other.to_string()),
-    }
-}
-
-fn format_to_str(f: &DatasetFormat) -> String {
-    match f {
-        DatasetFormat::Yolo => "Yolo".to_string(),
-        DatasetFormat::Coco => "Coco".to_string(),
-        DatasetFormat::HuggingFace => "HuggingFace".to_string(),
-        DatasetFormat::Custom(s) => s.clone(),
-    }
 }
 
 fn row_to_dataset(row: &rusqlite::Row<'_>) -> rusqlite::Result<Dataset> {
@@ -45,11 +29,20 @@ fn row_to_dataset(row: &rusqlite::Row<'_>) -> rusqlite::Result<Dataset> {
     let updated_at: Option<String> = row.get(6)?;
     let metadata_str: Option<String> = row.get(7)?;
 
-    let format = format_from_str(&format_str);
+    let format = DatasetFormat::from(format_str);
     let schema_path = schema_path.map(PathBuf::from);
     let metadata = metadata_str
         .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok());
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    7,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })
+        .transpose()?;
 
     Ok(Dataset {
         id,
@@ -59,6 +52,145 @@ fn row_to_dataset(row: &rusqlite::Row<'_>) -> rusqlite::Result<Dataset> {
         schema_path,
         created_at,
         updated_at,
+        metadata,
+    })
+}
+
+fn row_to_sample(row: &rusqlite::Row<'_>) -> rusqlite::Result<Sample> {
+    let id: i64 = row.get(0)?;
+    let dataset_id: i64 = row.get(1)?;
+    let name: String = row.get(2)?;
+    let metadata_str: Option<String> = row.get(3)?;
+    let created_at: String = row.get(4)?;
+
+    let metadata = metadata_str
+        .as_deref()
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    3,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })
+        .transpose()?;
+
+    Ok(Sample {
+        id,
+        dataset_id,
+        name,
+        metadata,
+        created_at,
+    })
+}
+
+fn row_to_asset(row: &rusqlite::Row<'_>) -> rusqlite::Result<Asset> {
+    let id: i64 = row.get(0)?;
+    let sample_id: i64 = row.get(1)?;
+    let asset_type_str: String = row.get(2)?;
+    let file_name: String = row.get(3)?;
+    let file_path_str: String = row.get(4)?;
+    let width: Option<i64> = row.get(5)?;
+    let height: Option<i64> = row.get(6)?;
+    let hash: Option<String> = row.get(7)?;
+    let metadata_str: Option<String> = row.get(8)?;
+
+    let asset_type =
+        AssetType::from_str(&asset_type_str).unwrap_or(AssetType::Other(asset_type_str));
+    let metadata = metadata_str
+        .as_deref()
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    8,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })
+        .transpose()?;
+
+    Ok(Asset {
+        id,
+        sample_id,
+        asset_type,
+        file_name,
+        file_path: PathBuf::from(file_path_str),
+        width: width.map(|w| w as u32),
+        height: height.map(|h| h as u32),
+        hash,
+        metadata,
+    })
+}
+
+fn row_to_annotation(row: &rusqlite::Row<'_>) -> rusqlite::Result<Annotation> {
+    let id: i64 = row.get(0)?;
+    let sample_id: i64 = row.get(1)?;
+    let asset_id: Option<i64> = row.get(2)?;
+    let category_id: Option<i64> = row.get(3)?;
+    let bbox_str: Option<String> = row.get(4)?;
+    let seg_str: Option<String> = row.get(5)?;
+    let kp_str: Option<String> = row.get(6)?;
+    let meta_str: Option<String> = row.get(7)?;
+
+    let bbox = bbox_str
+        .as_deref()
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    4,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })
+        .transpose()?;
+    let segmentation = seg_str
+        .as_deref()
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    5,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })
+        .transpose()?;
+    let keypoints = kp_str
+        .as_deref()
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    6,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })
+        .transpose()?;
+    let metadata = meta_str
+        .as_deref()
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    7,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })
+        .transpose()?;
+
+    Ok(Annotation {
+        id,
+        sample_id,
+        asset_id,
+        category_id,
+        bbox,
+        segmentation,
+        keypoints,
         metadata,
     })
 }
@@ -91,7 +223,7 @@ impl DatasetService {
             return Err(DmanError::DatasetAlreadyExists(name.to_string()));
         }
 
-        let format_str = format_to_str(&format);
+        let format_str = format.to_string();
         let path_str = path.to_string_lossy().to_string();
 
         db.conn.execute(
@@ -151,27 +283,31 @@ impl DatasetService {
         let ds = Self::get(db, name)?;
         let dataset_id = ds.id;
 
+        // Delete in dependency order: patches → embeddings → predictions → annotations → assets → samples
         db.conn.execute(
-            "DELETE FROM patches WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
+            "DELETE FROM patches WHERE asset_id IN (SELECT id FROM assets WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1))",
             params![dataset_id],
         )?;
         db.conn.execute(
-            "DELETE FROM embeddings WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
+            "DELETE FROM embeddings WHERE asset_id IN (SELECT id FROM assets WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1))",
             params![dataset_id],
         )?;
         db.conn.execute(
-            "DELETE FROM predictions WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
+            "DELETE FROM predictions WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1)",
             params![dataset_id],
         )?;
         db.conn.execute(
-            "DELETE FROM annotations WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
+            "DELETE FROM annotations WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1)",
             params![dataset_id],
         )?;
         db.conn.execute(
-            "DELETE FROM images WHERE dataset_id = ?1",
+            "DELETE FROM assets WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1)",
             params![dataset_id],
         )?;
-
+        db.conn.execute(
+            "DELETE FROM samples WHERE dataset_id = ?1",
+            params![dataset_id],
+        )?;
         db.conn.execute(
             "DELETE FROM categories WHERE dataset_id = ?1",
             params![dataset_id],
@@ -195,26 +331,257 @@ impl DatasetService {
         Ok(())
     }
 
+    // ─── Sample CRUD ─────────────────────────────────────────────────────────
+
+    /// Insert a new sample into the given dataset. Returns the new sample's ID.
+    pub fn add_sample(
+        db: &Database,
+        dataset_id: i64,
+        name: &str,
+        metadata: Option<&serde_json::Value>,
+    ) -> Result<i64> {
+        let metadata_str = metadata.map(serde_json::to_string).transpose()?;
+        db.conn.execute(
+            "INSERT INTO samples (dataset_id, name, metadata) VALUES (?1, ?2, ?3)",
+            params![dataset_id, name, metadata_str],
+        )?;
+        Ok(db.conn.last_insert_rowid())
+    }
+
+    /// Retrieve all samples for a dataset.
+    pub fn get_samples(db: &Database, dataset_id: i64) -> Result<Vec<Sample>> {
+        let mut stmt = db.conn.prepare(
+            "SELECT id, dataset_id, name, metadata, created_at FROM samples WHERE dataset_id = ?1 ORDER BY id",
+        )?;
+        let rows = stmt
+            .query_map(params![dataset_id], row_to_sample)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Count samples in a dataset.
+    pub fn get_sample_count(db: &Database, dataset_id: i64) -> Result<i64> {
+        let count: i64 = db.conn.query_row(
+            "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
+            params![dataset_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    /// Delete a sample (cascades to its assets, annotations, embeddings, patches, predictions).
+    pub fn remove_sample(db: &Database, sample_id: i64) -> Result<()> {
+        let rows_affected = db
+            .conn
+            .execute("DELETE FROM samples WHERE id = ?1", params![sample_id])?;
+        if rows_affected == 0 {
+            return Err(DmanError::SampleNotFound(format!("id={}", sample_id)));
+        }
+        Ok(())
+    }
+
+    // ─── Asset CRUD ───────────────────────────────────────────────────────────
+
+    /// Insert a new asset for the given sample. Returns the new asset's ID.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_asset(
+        db: &Database,
+        sample_id: i64,
+        asset_type: AssetType,
+        file_name: &str,
+        file_path: &Path,
+        width: Option<u32>,
+        height: Option<u32>,
+        hash: Option<&str>,
+        metadata: Option<&serde_json::Value>,
+    ) -> Result<i64> {
+        let asset_type_str = asset_type.to_string();
+        let file_path_str = file_path.to_string_lossy().to_string();
+        let metadata_str = metadata.map(serde_json::to_string).transpose()?;
+        db.conn.execute(
+            "INSERT INTO assets (sample_id, asset_type, file_name, file_path, width, height, hash, metadata) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                sample_id,
+                asset_type_str,
+                file_name,
+                file_path_str,
+                width.map(|w| w as i64),
+                height.map(|h| h as i64),
+                hash,
+                metadata_str,
+            ],
+        )?;
+        Ok(db.conn.last_insert_rowid())
+    }
+
+    /// Convenience: create a sample and a single asset in one call.
+    /// Returns `(sample_id, asset_id)`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_sample_with_single_asset(
+        db: &Database,
+        dataset_id: i64,
+        name: &str,
+        asset_type: AssetType,
+        file_name: &str,
+        file_path: &Path,
+        width: Option<u32>,
+        height: Option<u32>,
+        hash: Option<&str>,
+        metadata: Option<&serde_json::Value>,
+    ) -> Result<(i64, i64)> {
+        let sample_id = Self::add_sample(db, dataset_id, name, None)?;
+        let asset_id = Self::add_asset(
+            db, sample_id, asset_type, file_name, file_path, width, height, hash, metadata,
+        )?;
+        Ok((sample_id, asset_id))
+    }
+
+    /// Retrieve all assets for a sample.
+    pub fn get_assets(db: &Database, sample_id: i64) -> Result<Vec<Asset>> {
+        let mut stmt = db.conn.prepare(
+            "SELECT id, sample_id, asset_type, file_name, file_path, width, height, hash, metadata \
+             FROM assets WHERE sample_id = ?1 ORDER BY id",
+        )?;
+        let rows = stmt
+            .query_map(params![sample_id], row_to_asset)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Count all assets in a dataset (joins through samples).
+    pub fn get_asset_count(db: &Database, dataset_id: i64) -> Result<i64> {
+        let count: i64 = db.conn.query_row(
+            "SELECT COUNT(*) FROM assets a \
+             JOIN samples s ON a.sample_id = s.id \
+             WHERE s.dataset_id = ?1",
+            params![dataset_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    // ─── Annotation CRUD ──────────────────────────────────────────────────────
+
+    /// Add an annotation to a sample (optionally scoped to an asset).
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_annotation(
+        db: &Database,
+        sample_id: i64,
+        asset_id: Option<i64>,
+        category_id: Option<i64>,
+        bbox: Option<&crate::types::BBox>,
+        segmentation: Option<&Vec<Vec<f64>>>,
+        keypoints: Option<&Vec<f64>>,
+        metadata: Option<&serde_json::Value>,
+    ) -> Result<i64> {
+        let bbox_str = bbox.map(serde_json::to_string).transpose()?;
+        let seg_str = segmentation.map(serde_json::to_string).transpose()?;
+        let kp_str = keypoints.map(serde_json::to_string).transpose()?;
+        let meta_str = metadata.map(serde_json::to_string).transpose()?;
+
+        db.conn.execute(
+            "INSERT INTO annotations (sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![sample_id, asset_id, category_id, bbox_str, seg_str, kp_str, meta_str],
+        )?;
+        Ok(db.conn.last_insert_rowid())
+    }
+
+    /// Retrieve all annotations for a sample.
+    pub fn get_annotations_for_sample(db: &Database, sample_id: i64) -> Result<Vec<Annotation>> {
+        let mut stmt = db.conn.prepare(
+            "SELECT id, sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata \
+             FROM annotations WHERE sample_id = ?1 ORDER BY id",
+        )?;
+        let rows = stmt
+            .query_map(params![sample_id], row_to_annotation)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Retrieve all annotations scoped to a specific asset.
+    pub fn get_annotations_for_asset(db: &Database, asset_id: i64) -> Result<Vec<Annotation>> {
+        let mut stmt = db.conn.prepare(
+            "SELECT id, sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata \
+             FROM annotations WHERE asset_id = ?1 ORDER BY id",
+        )?;
+        let rows = stmt
+            .query_map(params![asset_id], row_to_annotation)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Count annotations for a dataset (joins through samples).
+    pub fn get_annotation_count(db: &Database, dataset_id: i64) -> Result<i64> {
+        let count: i64 = db.conn.query_row(
+            "SELECT COUNT(*) FROM annotations \
+             WHERE sample_id IN (SELECT id FROM samples WHERE dataset_id = ?1)",
+            params![dataset_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    // ─── Info / inspect ───────────────────────────────────────────────────────
+
     pub fn inspect(db: &Database, name: &str) -> Result<DatasetInfo> {
         let dataset = Self::get(db, name)?;
         let dataset_id = dataset.id;
 
-        let image_count: i64 = db.conn.query_row(
-            "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+        let sample_count = Self::get_sample_count(db, dataset_id)?;
+        let asset_count = Self::get_asset_count(db, dataset_id)?;
+        let annotation_count = Self::get_annotation_count(db, dataset_id)?;
+
+        let category_count: i64 = db.conn.query_row(
+            "SELECT COUNT(*) FROM categories WHERE dataset_id = ?1",
             params![dataset_id],
             |row| row.get(0),
         )?;
 
-        let annotation_count: i64 = db.conn.query_row(
-            "SELECT COUNT(*) FROM annotations WHERE image_id IN (SELECT id FROM images WHERE dataset_id = ?1)",
+        let disk_size_bytes = dir_size(&dataset.path);
+
+        Ok(DatasetInfo {
+            dataset,
+            sample_count: sample_count as u64,
+            asset_count: asset_count as u64,
+            annotation_count: annotation_count as u64,
+            category_count: category_count as u64,
+            disk_size_bytes,
+        })
+    }
+
+    pub fn get_info(db: &Database, dataset_id: i64) -> Result<DatasetInfo> {
+        let dataset = Self::get_by_id(db, dataset_id)?;
+        let sample_count = Self::get_sample_count(db, dataset_id)?;
+        let asset_count = Self::get_asset_count(db, dataset_id)?;
+        let annotation_count = Self::get_annotation_count(db, dataset_id)?;
+
+        let category_count: i64 = db.conn.query_row(
+            "SELECT COUNT(*) FROM categories WHERE dataset_id = ?1",
             params![dataset_id],
             |row| row.get(0),
         )?;
 
+        let disk_size_bytes = dir_size(&dataset.path);
+
+        Ok(DatasetInfo {
+            dataset,
+            sample_count: sample_count as u64,
+            asset_count: asset_count as u64,
+            annotation_count: annotation_count as u64,
+            category_count: category_count as u64,
+            disk_size_bytes,
+        })
+    }
+
+    // ─── Category helpers ─────────────────────────────────────────────────────
+
+    pub fn get_categories(db: &Database, dataset_id: i64) -> Result<Vec<Category>> {
         let mut stmt = db.conn.prepare(
             "SELECT id, dataset_id, name, supercategory FROM categories WHERE dataset_id = ?1 ORDER BY id",
         )?;
-        let categories = stmt
+        let rows = stmt
             .query_map(params![dataset_id], |row| {
                 Ok(Category {
                     id: row.get(0)?,
@@ -224,16 +591,7 @@ impl DatasetService {
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-
-        let disk_size_bytes = dir_size(&dataset.path);
-
-        Ok(DatasetInfo {
-            dataset,
-            image_count: image_count as u64,
-            annotation_count: annotation_count as u64,
-            categories,
-            disk_size_bytes,
-        })
+        Ok(rows)
     }
 }
 
@@ -275,11 +633,11 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        let ds = DatasetService::register(&db, "my-dataset", dir.path(), DatasetFormat::Yolo)
+        let ds = DatasetService::register(&db, "my-dataset", dir.path(), DatasetFormat::yolo())
             .expect("register");
 
         assert_eq!(ds.name, "my-dataset");
-        assert_eq!(ds.format, DatasetFormat::Yolo);
+        assert_eq!(ds.format, DatasetFormat::yolo());
         assert!(ds.id > 0);
     }
 
@@ -288,9 +646,9 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        DatasetService::register(&db, "dup", dir.path(), DatasetFormat::Coco).expect("first");
+        DatasetService::register(&db, "dup", dir.path(), DatasetFormat::coco()).expect("first");
 
-        let err = DatasetService::register(&db, "dup", dir.path(), DatasetFormat::Coco)
+        let err = DatasetService::register(&db, "dup", dir.path(), DatasetFormat::coco())
             .expect_err("should fail on duplicate");
 
         assert!(
@@ -308,7 +666,7 @@ mod tests {
             &db,
             "no-path",
             Path::new("/nonexistent/path/that/does/not/exist"),
-            DatasetFormat::Yolo,
+            DatasetFormat::yolo(),
         )
         .expect_err("should fail for missing path");
 
@@ -331,8 +689,8 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        DatasetService::register(&db, "ds1", dir.path(), DatasetFormat::Yolo).unwrap();
-        DatasetService::register(&db, "ds2", dir.path(), DatasetFormat::Coco).unwrap();
+        DatasetService::register(&db, "ds1", dir.path(), DatasetFormat::yolo()).unwrap();
+        DatasetService::register(&db, "ds2", dir.path(), DatasetFormat::coco()).unwrap();
 
         let datasets = DatasetService::list(&db).expect("list");
         assert_eq!(datasets.len(), 2);
@@ -346,11 +704,11 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        DatasetService::register(&db, "find-me", dir.path(), DatasetFormat::HuggingFace).unwrap();
+        DatasetService::register(&db, "find-me", dir.path(), DatasetFormat::huggingface()).unwrap();
 
         let ds = DatasetService::get(&db, "find-me").expect("get");
         assert_eq!(ds.name, "find-me");
-        assert_eq!(ds.format, DatasetFormat::HuggingFace);
+        assert_eq!(ds.format, DatasetFormat::huggingface());
     }
 
     #[test]
@@ -369,7 +727,7 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        let created = DatasetService::register(&db, "by-id", dir.path(), DatasetFormat::Yolo)
+        let created = DatasetService::register(&db, "by-id", dir.path(), DatasetFormat::yolo())
             .expect("register");
         let fetched = DatasetService::get_by_id(&db, created.id).expect("get_by_id");
         assert_eq!(fetched.name, "by-id");
@@ -391,7 +749,7 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        DatasetService::register(&db, "to-remove", dir.path(), DatasetFormat::Yolo).unwrap();
+        DatasetService::register(&db, "to-remove", dir.path(), DatasetFormat::yolo()).unwrap();
         DatasetService::remove(&db, "to-remove").expect("remove");
 
         let err = DatasetService::get(&db, "to-remove").expect_err("should be gone");
@@ -406,20 +764,16 @@ mod tests {
     }
 
     #[test]
-    fn dataset_remove_cascade_deletes_images_and_annotations() {
+    fn dataset_remove_cascade_deletes_samples_and_annotations() {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        let ds = DatasetService::register(&db, "cascade", dir.path(), DatasetFormat::Yolo).unwrap();
+        let ds =
+            DatasetService::register(&db, "cascade", dir.path(), DatasetFormat::yolo()).unwrap();
         let dataset_id = ds.id;
 
-        db.conn
-            .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'img.jpg', '/tmp/img.jpg')",
-                params![dataset_id],
-            )
-            .unwrap();
-        let image_id = db.conn.last_insert_rowid();
+        let sample_id =
+            DatasetService::add_sample(&db, dataset_id, "sample-1", None).expect("add sample");
 
         db.conn
             .execute(
@@ -428,24 +782,20 @@ mod tests {
             )
             .unwrap();
 
-        db.conn
-            .execute(
-                "INSERT INTO annotations (image_id, category_id) VALUES (?1, 1)",
-                params![image_id],
-            )
-            .unwrap();
+        DatasetService::add_annotation(&db, sample_id, None, Some(1), None, None, None, None)
+            .expect("add annotation");
 
         DatasetService::remove(&db, "cascade").expect("remove");
 
-        let img_count: i64 = db
+        let sample_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM images WHERE dataset_id = ?1",
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
                 params![dataset_id],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(img_count, 0, "images should be deleted");
+        assert_eq!(sample_count, 0, "samples should be deleted");
 
         let cat_count: i64 = db
             .conn
@@ -469,7 +819,7 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        DatasetService::register(&db, "meta-ds", dir.path(), DatasetFormat::Coco).unwrap();
+        DatasetService::register(&db, "meta-ds", dir.path(), DatasetFormat::coco()).unwrap();
 
         let meta = serde_json::json!({"version": "1.0", "source": "custom"});
         DatasetService::update_metadata(&db, "meta-ds", meta.clone()).expect("update");
@@ -492,23 +842,36 @@ mod tests {
         let dir = temp_dir();
 
         let ds =
-            DatasetService::register(&db, "inspect-me", dir.path(), DatasetFormat::Yolo).unwrap();
+            DatasetService::register(&db, "inspect-me", dir.path(), DatasetFormat::yolo()).unwrap();
         let dataset_id = ds.id;
 
-        db.conn
-            .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'a.jpg', '/tmp/a.jpg')",
-                params![dataset_id],
-            )
-            .unwrap();
-        let img1 = db.conn.last_insert_rowid();
-        db.conn
-            .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, 'b.jpg', '/tmp/b.jpg')",
-                params![dataset_id],
-            )
-            .unwrap();
-        let img2 = db.conn.last_insert_rowid();
+        let s1 = DatasetService::add_sample(&db, dataset_id, "sample-a", None).unwrap();
+        let s2 = DatasetService::add_sample(&db, dataset_id, "sample-b", None).unwrap();
+
+        DatasetService::add_asset(
+            &db,
+            s1,
+            AssetType::Image,
+            "a.jpg",
+            Path::new("/tmp/a.jpg"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        DatasetService::add_asset(
+            &db,
+            s2,
+            AssetType::Image,
+            "b.jpg",
+            Path::new("/tmp/b.jpg"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         db.conn
             .execute(
@@ -523,29 +886,15 @@ mod tests {
             )
             .unwrap();
 
-        db.conn
-            .execute(
-                "INSERT INTO annotations (image_id) VALUES (?1)",
-                params![img1],
-            )
-            .unwrap();
-        db.conn
-            .execute(
-                "INSERT INTO annotations (image_id) VALUES (?1)",
-                params![img1],
-            )
-            .unwrap();
-        db.conn
-            .execute(
-                "INSERT INTO annotations (image_id) VALUES (?1)",
-                params![img2],
-            )
-            .unwrap();
+        DatasetService::add_annotation(&db, s1, None, None, None, None, None, None).unwrap();
+        DatasetService::add_annotation(&db, s1, None, None, None, None, None, None).unwrap();
+        DatasetService::add_annotation(&db, s2, None, None, None, None, None, None).unwrap();
 
         let info = DatasetService::inspect(&db, "inspect-me").expect("inspect");
-        assert_eq!(info.image_count, 2);
+        assert_eq!(info.sample_count, 2);
+        assert_eq!(info.asset_count, 2);
         assert_eq!(info.annotation_count, 3);
-        assert_eq!(info.categories.len(), 2);
+        assert_eq!(info.category_count, 2);
     }
 
     #[test]
@@ -560,7 +909,7 @@ mod tests {
         let db = in_memory_db();
         let dir = temp_dir();
 
-        let ds = DatasetService::register(&db, "cycle-ds", dir.path(), DatasetFormat::Yolo)
+        let ds = DatasetService::register(&db, "cycle-ds", dir.path(), DatasetFormat::yolo())
             .expect("register");
         assert_eq!(ds.name, "cycle-ds");
 
@@ -577,12 +926,157 @@ mod tests {
             .expect("update_metadata");
 
         let info = DatasetService::inspect(&db, "cycle-ds").expect("inspect");
-        assert_eq!(info.image_count, 0);
+        assert_eq!(info.sample_count, 0);
         assert_eq!(info.annotation_count, 0);
 
         DatasetService::remove(&db, "cycle-ds").expect("remove");
 
         let list_after = DatasetService::list(&db).expect("list after remove");
         assert!(list_after.is_empty());
+    }
+
+    #[test]
+    fn add_sample_and_asset_and_retrieve() {
+        let db = in_memory_db();
+        let dir = temp_dir();
+
+        let ds = DatasetService::register(&db, "sample-test", dir.path(), DatasetFormat::yolo())
+            .unwrap();
+
+        let sample_id = DatasetService::add_sample(&db, ds.id, "frame-001", None).unwrap();
+        assert!(sample_id > 0);
+
+        let asset_id = DatasetService::add_asset(
+            &db,
+            sample_id,
+            AssetType::Image,
+            "frame-001.jpg",
+            Path::new("/tmp/frame-001.jpg"),
+            Some(640),
+            Some(480),
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(asset_id > 0);
+
+        let samples = DatasetService::get_samples(&db, ds.id).unwrap();
+        assert_eq!(samples.len(), 1);
+        assert_eq!(samples[0].name, "frame-001");
+
+        let assets = DatasetService::get_assets(&db, sample_id).unwrap();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].file_name, "frame-001.jpg");
+        assert_eq!(assets[0].width, Some(640));
+        assert_eq!(assets[0].height, Some(480));
+    }
+
+    #[test]
+    fn add_sample_with_single_asset_convenience() {
+        let db = in_memory_db();
+        let dir = temp_dir();
+
+        let ds =
+            DatasetService::register(&db, "conv-test", dir.path(), DatasetFormat::coco()).unwrap();
+
+        let (sample_id, asset_id) = DatasetService::add_sample_with_single_asset(
+            &db,
+            ds.id,
+            "img-001",
+            AssetType::Image,
+            "img-001.jpg",
+            Path::new("/tmp/img-001.jpg"),
+            Some(1920),
+            Some(1080),
+            Some("abc123"),
+            None,
+        )
+        .unwrap();
+
+        assert!(sample_id > 0);
+        assert!(asset_id > 0);
+
+        assert_eq!(DatasetService::get_sample_count(&db, ds.id).unwrap(), 1);
+        assert_eq!(DatasetService::get_asset_count(&db, ds.id).unwrap(), 1);
+    }
+
+    #[test]
+    fn annotations_for_sample_and_asset() {
+        let db = in_memory_db();
+        let dir = temp_dir();
+
+        let ds =
+            DatasetService::register(&db, "ann-test", dir.path(), DatasetFormat::yolo()).unwrap();
+
+        let sample_id = DatasetService::add_sample(&db, ds.id, "s1", None).unwrap();
+        let asset_id = DatasetService::add_asset(
+            &db,
+            sample_id,
+            AssetType::Image,
+            "x.jpg",
+            Path::new("/tmp/x.jpg"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        // annotation scoped to asset
+        DatasetService::add_annotation(
+            &db,
+            sample_id,
+            Some(asset_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        // annotation scoped to sample only
+        DatasetService::add_annotation(&db, sample_id, None, None, None, None, None, None).unwrap();
+
+        let sample_anns = DatasetService::get_annotations_for_sample(&db, sample_id).unwrap();
+        assert_eq!(sample_anns.len(), 2);
+
+        let asset_anns = DatasetService::get_annotations_for_asset(&db, asset_id).unwrap();
+        assert_eq!(asset_anns.len(), 1);
+        assert_eq!(asset_anns[0].asset_id, Some(asset_id));
+    }
+
+    #[test]
+    fn remove_sample_cascades() {
+        let db = in_memory_db();
+        let dir = temp_dir();
+
+        let ds =
+            DatasetService::register(&db, "del-sample", dir.path(), DatasetFormat::yolo()).unwrap();
+
+        let sample_id = DatasetService::add_sample(&db, ds.id, "to-del", None).unwrap();
+        DatasetService::add_asset(
+            &db,
+            sample_id,
+            AssetType::Image,
+            "f.jpg",
+            Path::new("/tmp/f.jpg"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        DatasetService::remove_sample(&db, sample_id).unwrap();
+
+        let samples = DatasetService::get_samples(&db, ds.id).unwrap();
+        assert!(samples.is_empty());
+    }
+
+    #[test]
+    fn remove_sample_not_found() {
+        let db = in_memory_db();
+        let err = DatasetService::remove_sample(&db, 9999).expect_err("should fail");
+        assert!(matches!(err, DmanError::SampleNotFound(_)));
     }
 }

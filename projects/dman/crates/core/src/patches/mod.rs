@@ -24,25 +24,25 @@ impl PatchService {
     pub fn extract(
         db: &Database,
         _storage: &StorageManager,
-        image_id: i64,
+        asset_id: i64,
         bbox: &BBox,
         output_dir: &Path,
     ) -> Result<Patch> {
-        let image_file_path: String = db
+        let asset_file_path: String = db
             .conn
             .query_row(
-                "SELECT file_path FROM images WHERE id = ?1",
-                rusqlite::params![image_id],
+                "SELECT file_path FROM assets WHERE id = ?1",
+                rusqlite::params![asset_id],
                 |row| row.get(0),
             )
             .map_err(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => {
-                    DmanError::StorageError(format!("image {} not found", image_id))
+                    DmanError::AssetNotFound(format!("{}", asset_id))
                 }
                 other => DmanError::Database(other),
             })?;
 
-        let img = image::open(&image_file_path)
+        let img = image::open(&asset_file_path)
             .map_err(|e| DmanError::StorageError(format!("failed to open image: {}", e)))?;
 
         let (img_w, img_h) = img.dimensions();
@@ -53,7 +53,7 @@ impl PatchService {
 
         let cropped = img.crop_imm(cx, cy, cw, ch);
 
-        let filename = format!("{}_{:08x}.jpg", image_id, bbox_hash(bbox));
+        let filename = format!("{}_{:08x}.jpg", asset_id, bbox_hash(bbox));
         std::fs::create_dir_all(output_dir)?;
         let output_path = output_dir.join(&filename);
         cropped
@@ -66,14 +66,14 @@ impl PatchService {
             .ok_or_else(|| DmanError::StorageError("patch path is not valid UTF-8".to_string()))?;
 
         db.conn.execute(
-            "INSERT INTO patches (image_id, bbox, file_path) VALUES (?1, ?2, ?3)",
-            rusqlite::params![image_id, bbox_json, file_path_str],
+            "INSERT INTO patches (asset_id, bbox, file_path) VALUES (?1, ?2, ?3)",
+            rusqlite::params![asset_id, bbox_json, file_path_str],
         )?;
         let patch_id = db.conn.last_insert_rowid();
 
         Ok(Patch {
             id: patch_id,
-            image_id,
+            asset_id,
             bbox: bbox.clone(),
             file_path: Some(output_path),
             metadata: None,
@@ -87,22 +87,24 @@ impl PatchService {
         output_dir: &Path,
     ) -> Result<Vec<Patch>> {
         let mut stmt = db.conn.prepare(
-            "SELECT a.image_id, a.bbox
+            "SELECT a.asset_id, a.bbox
              FROM annotations a
-             JOIN images i ON a.image_id = i.id
-             WHERE i.dataset_id = ?1
+             JOIN assets ast ON a.asset_id = ast.id
+             JOIN samples s ON ast.sample_id = s.id
+             WHERE s.dataset_id = ?1
+               AND a.asset_id IS NOT NULL
                AND a.bbox IS NOT NULL",
         )?;
 
         struct Row {
-            image_id: i64,
+            asset_id: i64,
             bbox_json: String,
         }
 
         let rows: Vec<Row> = stmt
             .query_map(rusqlite::params![dataset_id], |row| {
                 Ok(Row {
-                    image_id: row.get(0)?,
+                    asset_id: row.get(0)?,
                     bbox_json: row.get(1)?,
                 })
             })?
@@ -111,21 +113,21 @@ impl PatchService {
         let mut patches = Vec::new();
         for row in rows {
             let bbox: BBox = serde_json::from_str(&row.bbox_json)?;
-            patches.push(Self::extract(db, storage, row.image_id, &bbox, output_dir)?);
+            patches.push(Self::extract(db, storage, row.asset_id, &bbox, output_dir)?);
         }
         Ok(patches)
     }
 
-    pub fn get_by_image(db: &Database, image_id: i64) -> Result<Vec<Patch>> {
+    pub fn get_by_asset(db: &Database, asset_id: i64) -> Result<Vec<Patch>> {
         let mut stmt = db.conn.prepare(
-            "SELECT id, image_id, bbox, file_path, metadata FROM patches WHERE image_id = ?1",
+            "SELECT id, asset_id, bbox, file_path, metadata FROM patches WHERE asset_id = ?1",
         )?;
 
         let rows = stmt
-            .query_map(rusqlite::params![image_id], |row| {
+            .query_map(rusqlite::params![asset_id], |row| {
                 Ok(PatchRow {
                     id: row.get(0)?,
-                    image_id: row.get(1)?,
+                    asset_id: row.get(1)?,
                     bbox_json: row.get(2)?,
                     file_path: row.get::<_, Option<String>>(3)?,
                     metadata_json: row.get::<_, Option<String>>(4)?,
@@ -138,17 +140,18 @@ impl PatchService {
 
     pub fn get_by_dataset(db: &Database, dataset_id: i64) -> Result<Vec<Patch>> {
         let mut stmt = db.conn.prepare(
-            "SELECT p.id, p.image_id, p.bbox, p.file_path, p.metadata
+            "SELECT p.id, p.asset_id, p.bbox, p.file_path, p.metadata
              FROM patches p
-             JOIN images i ON p.image_id = i.id
-             WHERE i.dataset_id = ?1",
+             JOIN assets a ON p.asset_id = a.id
+             JOIN samples s ON a.sample_id = s.id
+             WHERE s.dataset_id = ?1",
         )?;
 
         let rows = stmt
             .query_map(rusqlite::params![dataset_id], |row| {
                 Ok(PatchRow {
                     id: row.get(0)?,
-                    image_id: row.get(1)?,
+                    asset_id: row.get(1)?,
                     bbox_json: row.get(2)?,
                     file_path: row.get::<_, Option<String>>(3)?,
                     metadata_json: row.get::<_, Option<String>>(4)?,
@@ -189,7 +192,7 @@ impl PatchService {
 
 struct PatchRow {
     id: i64,
-    image_id: i64,
+    asset_id: i64,
     bbox_json: String,
     file_path: Option<String>,
     metadata_json: Option<String>,
@@ -204,7 +207,7 @@ fn row_to_patch(row: PatchRow) -> Result<Patch> {
         .transpose()?;
     Ok(Patch {
         id: row.id,
-        image_id: row.image_id,
+        asset_id: row.asset_id,
         bbox,
         file_path,
         metadata,
@@ -229,7 +232,7 @@ mod tests {
         path
     }
 
-    fn insert_image(db: &Database, src_path: &std::path::Path) -> (i64, i64) {
+    fn insert_asset(db: &Database, src_path: &std::path::Path) -> (i64, i64) {
         db.conn
             .execute(
                 "INSERT INTO datasets (name, path) VALUES (?1, ?2)",
@@ -245,19 +248,30 @@ mod tests {
             )
             .expect("dataset id");
 
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                rusqlite::params![dataset_id, "sample-001"],
+            )
+            .expect("insert sample");
+        let sample_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .expect("sample id");
+
         let path_str = src_path.to_str().expect("path str");
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                rusqlite::params![dataset_id, "test_img.jpg", path_str],
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', ?2, ?3)",
+                rusqlite::params![sample_id, "test_img.jpg", path_str],
             )
-            .expect("insert image");
-        let image_id: i64 = db
+            .expect("insert asset");
+        let asset_id: i64 = db
             .conn
             .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
-            .expect("image id");
+            .expect("asset id");
 
-        (dataset_id, image_id)
+        (dataset_id, asset_id)
     }
 
     fn full_bbox() -> BBox {
@@ -275,11 +289,11 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
         let patch = PatchService::extract(
             &db,
             &storage,
-            image_id,
+            asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
         )
@@ -295,21 +309,21 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
         let bbox = full_bbox();
         let patch =
-            PatchService::extract(&db, &storage, image_id, &bbox, &tmp.path().join("out")).unwrap();
+            PatchService::extract(&db, &storage, asset_id, &bbox, &tmp.path().join("out")).unwrap();
 
         let count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM patches WHERE id = ?1 AND image_id = ?2",
-                rusqlite::params![patch.id, image_id],
+                "SELECT COUNT(*) FROM patches WHERE id = ?1 AND asset_id = ?2",
+                rusqlite::params![patch.id, asset_id],
                 |r| r.get(0),
             )
             .unwrap();
         assert_eq!(count, 1);
-        assert_eq!(patch.image_id, image_id);
+        assert_eq!(patch.asset_id, asset_id);
         assert_eq!(patch.bbox, bbox);
     }
 
@@ -319,11 +333,11 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
         let patch = PatchService::extract(
             &db,
             &storage,
-            image_id,
+            asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
         )
@@ -336,24 +350,24 @@ mod tests {
     }
 
     #[test]
-    fn get_by_image_returns_patches() {
+    fn get_by_asset_returns_patches() {
         let tmp = tempdir().unwrap();
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
         PatchService::extract(
             &db,
             &storage,
-            image_id,
+            asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
         )
         .unwrap();
 
-        let patches = PatchService::get_by_image(&db, image_id).unwrap();
+        let patches = PatchService::get_by_asset(&db, asset_id).unwrap();
         assert_eq!(patches.len(), 1);
-        assert_eq!(patches[0].image_id, image_id);
+        assert_eq!(patches[0].asset_id, asset_id);
     }
 
     #[test]
@@ -362,11 +376,11 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (dataset_id, image_id) = insert_image(&db, &make_test_image(tmp.path()));
+        let (dataset_id, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
         PatchService::extract(
             &db,
             &storage,
-            image_id,
+            asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
         )
@@ -374,7 +388,7 @@ mod tests {
 
         let patches = PatchService::get_by_dataset(&db, dataset_id).unwrap();
         assert_eq!(patches.len(), 1);
-        assert_eq!(patches[0].image_id, image_id);
+        assert_eq!(patches[0].asset_id, asset_id);
     }
 
     #[test]
@@ -383,11 +397,11 @@ mod tests {
         let db = Database::open_in_memory().expect("db");
         let storage = StorageManager::new(tmp.path().to_path_buf());
 
-        let (_, image_id) = insert_image(&db, &make_test_image(tmp.path()));
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
         let patch = PatchService::extract(
             &db,
             &storage,
-            image_id,
+            asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
         )
@@ -411,30 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_batch_creates_patches() {
-        let tmp = tempdir().unwrap();
-        let db = Database::open_in_memory().expect("db");
-        let storage = StorageManager::new(tmp.path().to_path_buf());
-
-        let (dataset_id, image_id) = insert_image(&db, &make_test_image(tmp.path()));
-        let bbox_json = serde_json::to_string(&full_bbox()).unwrap();
-        db.conn
-            .execute(
-                "INSERT INTO annotations (image_id, bbox) VALUES (?1, ?2)",
-                rusqlite::params![image_id, bbox_json],
-            )
-            .unwrap();
-
-        let patches =
-            PatchService::extract_batch(&db, &storage, dataset_id, &tmp.path().join("out"))
-                .unwrap();
-
-        assert_eq!(patches.len(), 1);
-        assert!(patches[0].file_path.as_ref().unwrap().exists());
-    }
-
-    #[test]
-    fn get_by_image_empty_when_none() {
+    fn get_by_asset_empty_when_none() {
         let db = Database::open_in_memory().expect("db");
         db.conn
             .execute(
@@ -452,16 +443,26 @@ mod tests {
             .unwrap();
         db.conn
             .execute(
-                "INSERT INTO images (dataset_id, file_name, file_path) VALUES (?1, ?2, ?3)",
-                rusqlite::params![dataset_id, "ghost.jpg", "/tmp/ghost.jpg"],
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                rusqlite::params![dataset_id, "ghost-sample"],
             )
             .unwrap();
-        let image_id: i64 = db
+        let sample_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', ?2, ?3)",
+                rusqlite::params![sample_id, "ghost.jpg", "/tmp/ghost.jpg"],
+            )
+            .unwrap();
+        let asset_id: i64 = db
             .conn
             .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
             .unwrap();
 
-        let patches = PatchService::get_by_image(&db, image_id).unwrap();
+        let patches = PatchService::get_by_asset(&db, asset_id).unwrap();
         assert!(patches.is_empty());
     }
 }

@@ -1083,10 +1083,14 @@ dependencies = [
  "clap",
  "colored",
  "comfy-table",
+ "crossterm 0.28.1",
+ "dirs",
  "dman-core",
  "dman-python",
  "dman-server",
  "predicates",
+ "ratatui",
+ "rusqlite",
  "serde_json",
  "tempfile",
 ]
@@ -1144,18 +1148,6 @@ dependencies = [
  "tokio",
  "tower",
  "tower-http",
-]
-
-[[package]]
-name = "dman-tui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossterm 0.28.1",
- "dirs",
- "dman-core",
- "ratatui",
- "rusqlite",
 ]
 
 [[package]]
