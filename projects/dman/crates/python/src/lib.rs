@@ -62,7 +62,7 @@ fn parse_plugin_marker(content: &str, path: PathBuf) -> Option<PluginInfo> {
     Some(PluginInfo::new(name, plugin_type, version, path))
 }
 
-fn extract_str_field<'a>(content: &'a str, field: &str) -> Option<String> {
+fn extract_str_field(content: &str, field: &str) -> Option<String> {
     let needle = format!("\"{field}\"");
     let needle2 = format!("'{field}'");
 

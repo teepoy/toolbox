@@ -162,7 +162,7 @@ impl DatasetOps {
             let metadata_str = src
                 .metadata
                 .as_ref()
-                .map(|m| serde_json::to_string(m))
+                .map(serde_json::to_string)
                 .transpose()?;
 
             db.conn.execute(

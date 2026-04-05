@@ -106,9 +106,7 @@ impl StorageManager {
             .conn
             .prepare("SELECT file_path FROM images WHERE dataset_id = ?")?;
         let paths: Vec<String> = stmt
-            .query_map(rusqlite::params![dataset_id], |row| {
-                Ok(row.get::<_, String>(0)?)
-            })?
+            .query_map(rusqlite::params![dataset_id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         let total = paths.len() as u64;

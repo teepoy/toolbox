@@ -66,13 +66,13 @@ impl CocoImporter {
         }
 
         let ann_dir = path.join("annotations");
-        if ann_dir.is_dir() {
-            if let Ok(entries) = fs::read_dir(&ann_dir) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.extension().and_then(|e| e.to_str()) == Some("json") {
-                        return Some(p);
-                    }
+        if ann_dir.is_dir()
+            && let Ok(entries) = fs::read_dir(&ann_dir)
+        {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) == Some("json") {
+                    return Some(p);
                 }
             }
         }
@@ -95,33 +95,31 @@ impl FormatImporter for CocoImporter {
     fn detect(&self, path: &Path) -> bool {
         if path.is_dir() {
             let ann_dir = path.join("annotations");
-            if ann_dir.is_dir() {
-                if let Ok(entries) = fs::read_dir(&ann_dir) {
-                    let has_json = entries
-                        .flatten()
-                        .any(|e| e.path().extension().and_then(|x| x.to_str()) == Some("json"));
-                    if has_json {
-                        return true;
-                    }
+            if ann_dir.is_dir()
+                && let Ok(entries) = fs::read_dir(&ann_dir)
+            {
+                let has_json = entries
+                    .flatten()
+                    .any(|e| e.path().extension().and_then(|x| x.to_str()) == Some("json"));
+                if has_json {
+                    return true;
                 }
             }
 
             let direct = path.join("annotations.json");
-            if direct.is_file() {
-                if let Ok(content) = fs::read_to_string(&direct) {
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                        return Self::looks_like_coco(&val);
-                    }
-                }
+            if direct.is_file()
+                && let Ok(content) = fs::read_to_string(&direct)
+                && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+            {
+                return Self::looks_like_coco(&val);
             }
         }
 
-        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json") {
-            if let Ok(content) = fs::read_to_string(path) {
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                    return Self::looks_like_coco(&val);
-                }
-            }
+        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json")
+            && let Ok(content) = fs::read_to_string(path)
+            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+        {
+            return Self::looks_like_coco(&val);
         }
 
         false
@@ -145,10 +143,6 @@ impl FormatImporter for CocoImporter {
 
         let content = fs::read_to_string(&json_path)?;
         let coco: CocoJson = serde_json::from_str(&content)?;
-
-        let image_map: HashMap<i64, &CocoImage> =
-            coco.images.iter().map(|img| (img.id, img)).collect();
-        let _ = &image_map;
 
         let dataset_path = if path.is_file() {
             path.parent().unwrap_or(path)

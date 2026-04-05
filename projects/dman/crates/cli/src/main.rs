@@ -1,5 +1,5 @@
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -227,7 +227,7 @@ fn cmd_init() -> Result<()> {
     Ok(())
 }
 
-fn cmd_add(name: &str, path: &PathBuf, format: DatasetFormat) -> Result<()> {
+fn cmd_add(name: &str, path: &Path, format: DatasetFormat) -> Result<()> {
     let catalog = open_catalog()?;
     let ds = DatasetService::register(catalog.db(), name, path, format)
         .with_context(|| format!("failed to register dataset '{name}'"))?;
@@ -365,7 +365,7 @@ fn cmd_remove(name: &str, yes: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_import_stub(path: &PathBuf, format: Option<FormatArg>, name: Option<&str>) -> Result<()> {
+fn cmd_import_stub(path: &Path, format: Option<FormatArg>, name: Option<&str>) -> Result<()> {
     eprintln!(
         "{} import is not yet implemented (path={}, format={:?}, name={:?})",
         "stub:".yellow().bold(),
@@ -376,7 +376,7 @@ fn cmd_import_stub(path: &PathBuf, format: Option<FormatArg>, name: Option<&str>
     Ok(())
 }
 
-fn cmd_export_stub(name: &str, output: &PathBuf, _format: FormatArg) -> Result<()> {
+fn cmd_export_stub(name: &str, output: &Path, _format: FormatArg) -> Result<()> {
     eprintln!(
         "{} export is not yet implemented (name={name}, output={})",
         "stub:".yellow().bold(),

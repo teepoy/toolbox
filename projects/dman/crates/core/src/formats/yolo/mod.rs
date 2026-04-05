@@ -413,7 +413,7 @@ mod tests {
             .expect("import should succeed");
 
         assert_eq!(dataset.name, "yolo-fixture");
-        assert_eq!(dataset.id > 0, true);
+        assert!(dataset.id > 0);
 
         // Verify exactly 3 images were inserted
         let img_count: i64 = db

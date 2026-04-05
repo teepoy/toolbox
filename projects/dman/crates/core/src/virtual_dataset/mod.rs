@@ -60,92 +60,20 @@ fn row_to_vds(row: &rusqlite::Row<'_>) -> rusqlite::Result<VirtualDataset> {
 
 // ─── Circular reference detection ───────────────────────────────────────────
 
-/// Collect all dataset IDs (source_datasets) referenced by an existing virtual dataset,
-/// transitively. Returns Err if a cycle is detected.
-fn collect_all_source_ids(
-    db: &Database,
-    vds_name: &str,
-    visited: &mut HashSet<String>,
-) -> Result<HashSet<i64>> {
-    if !visited.insert(vds_name.to_string()) {
-        return Err(DmanError::CircularReference(format!(
-            "virtual dataset '{}' forms a cycle",
-            vds_name
-        )));
-    }
-
-    let vds = match get_internal(db, vds_name) {
-        Ok(v) => v,
-        Err(DmanError::DatasetNotFound(_)) => {
-            visited.remove(vds_name);
-            return Ok(HashSet::new());
-        }
-        Err(e) => return Err(e),
-    };
-
-    let mut all: HashSet<i64> = vds.source_datasets.iter().copied().collect();
-
-    // Also traverse any virtual dataset IDs embedded in Merge operations
-    let merge_vds_ids = extract_merge_dataset_ids(&vds.definition);
-    for vds_id in merge_vds_ids {
-        // Look up virtual dataset by id
-        let sub = match get_by_id_internal(db, vds_id) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let sub_ids = collect_all_source_ids(db, &sub.name, visited)?;
-        all.extend(sub_ids);
-    }
-
-    visited.remove(vds_name);
-    Ok(all)
-}
-
-fn extract_merge_dataset_ids(def: &VirtualDatasetDef) -> Vec<i64> {
-    match def {
-        VirtualDatasetDef::Merge { datasets } => datasets.clone(),
-        VirtualDatasetDef::Chain(steps) => {
-            steps.iter().flat_map(extract_merge_dataset_ids).collect()
-        }
-        VirtualDatasetDef::Filter { .. } => vec![],
-        VirtualDatasetDef::Sample { .. } => vec![],
-        VirtualDatasetDef::Split { .. } => vec![],
-        VirtualDatasetDef::SchemaTransform { .. } => vec![],
-    }
-}
-
-fn check_no_circular(db: &Database, new_name: &str, source_datasets: &[i64]) -> Result<()> {
-    // Get all virtual datasets; for each, check if new_name appears in their transitive sources
+fn check_no_circular(db: &Database, new_name: &str, _source_datasets: &[i64]) -> Result<()> {
     let all_vds = list_internal(db)?;
-    for vds in &all_vds {
-        // If the new VDS would be a source for any existing one, verify no cycle
-        let mut visited = HashSet::new();
-        let transitive = collect_all_source_ids(db, &vds.name, &mut visited)?;
-        // If the new vds's source datasets overlap with an existing vds that itself
-        // would be a source — we just need to ensure new_name is not already referenced.
-        let _ = transitive;
-    }
 
-    // More direct check: ensure none of the source_datasets are virtual_dataset IDs
-    // that transitively reference new_name (which doesn't exist yet, so no cycle possible)
-    // The real circular check is: if any of source_datasets is a virtual_dataset id whose
-    // own source_datasets include new_name transitively.
-    // Since new_name doesn't exist yet, no cycle is possible at creation time.
-    // BUT if new_name already exists (e.g., update scenario), we must check.
-
-    // Check if any existing virtual dataset has the new_name in source_datasets transitively
     for vds in &all_vds {
         if vds.name == new_name {
-            continue; // self-reference from prior version
+            continue;
         }
         // If this existing vds's source_datasets contain the new vds's id (not yet created),
         // that's fine. We check: would creating new_name with source_datasets=[vds.id] create a cycle?
         // i.e., does vds transitively depend on new_name?
         let mut visited = HashSet::new();
-        let _ = check_no_cycle_for_new(db, new_name, vds.id, &mut visited)?;
+        check_no_cycle_for_new(db, new_name, vds.id, &mut visited)?;
     }
 
-    let _ = source_datasets;
     Ok(())
 }
 
@@ -430,7 +358,7 @@ fn filter_by_metadata(
         .iter()
         .filter(|img| {
             if let Some(meta) = &img.metadata {
-                meta.get(key).map_or(false, |v| v == value)
+                meta.get(key) == Some(value)
             } else {
                 false
             }
@@ -483,10 +411,10 @@ fn apply_filter_op(
     match op {
         FilterOp::Eq => img_val == filter_val,
         FilterOp::Ne => img_val != filter_val,
-        FilterOp::Gt => compare_json(img_val, filter_val).map_or(false, |o| o > 0),
-        FilterOp::Lt => compare_json(img_val, filter_val).map_or(false, |o| o < 0),
-        FilterOp::Gte => compare_json(img_val, filter_val).map_or(false, |o| o >= 0),
-        FilterOp::Lte => compare_json(img_val, filter_val).map_or(false, |o| o <= 0),
+        FilterOp::Gt => compare_json(img_val, filter_val).is_some_and(|o| o > 0),
+        FilterOp::Lt => compare_json(img_val, filter_val).is_some_and(|o| o < 0),
+        FilterOp::Gte => compare_json(img_val, filter_val).is_some_and(|o| o >= 0),
+        FilterOp::Lte => compare_json(img_val, filter_val).is_some_and(|o| o <= 0),
         FilterOp::Contains => {
             if let (Some(s), Some(pat)) = (img_val.as_str(), filter_val.as_str()) {
                 s.contains(pat)

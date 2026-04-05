@@ -245,11 +245,11 @@ impl Schema {
     /// Parse a TOML file at `path` into a `SchemaDefinition`.
     pub fn from_toml(path: &Path) -> Result<SchemaDefinition> {
         let content = std::fs::read_to_string(path)?;
-        Schema::from_str(&content)
+        Schema::parse_toml(&content)
     }
 
     /// Parse a TOML string into a `SchemaDefinition`.
-    pub fn from_str(s: &str) -> Result<SchemaDefinition> {
+    pub fn parse_toml(s: &str) -> Result<SchemaDefinition> {
         // Try flat form first (name/version at top-level).
         if let Ok(raw) = toml::from_str::<RawSchema>(s) {
             return Ok(raw.into_schema_definition());
@@ -369,7 +369,7 @@ fn check_type(val: &serde_json::Value, dtype: &DataType) -> Option<std::string::
                     .iter()
                     .any(|v| !v.is_f64() && !v.is_i64() && !v.is_u64())
                 {
-                    return Some(format!("embedding vector must contain numbers only"));
+                    return Some("embedding vector must contain numbers only".to_string());
                 }
             }
         },
@@ -522,7 +522,7 @@ dtype = "float"
 required = false
 default = 1.0
 "#;
-        let schema = Schema::from_str(toml).expect("should parse");
+        let schema = Schema::parse_toml(toml).expect("should parse");
         assert_eq!(schema.name, "basic-schema");
         assert_eq!(schema.version, "1");
         assert_eq!(schema.columns.len(), 2);
@@ -563,7 +563,7 @@ dtype = "Float"
 required = false
 default = 1.0
 "#;
-        let schema = Schema::from_str(toml).expect("should parse");
+        let schema = Schema::parse_toml(toml).expect("should parse");
         assert_eq!(schema.name, "object-detection");
         assert_eq!(schema.columns.len(), 4);
         assert_eq!(schema.columns[0].dtype, DataType::ImagePath);
@@ -582,7 +582,7 @@ name = "embedding"
 dtype = "EmbeddingVector(128)"
 required = true
 "#;
-        let schema = Schema::from_str(toml).expect("should parse wrapped form");
+        let schema = Schema::parse_toml(toml).expect("should parse wrapped form");
         assert_eq!(schema.name, "wrapped");
         assert_eq!(schema.columns[0].dtype, DataType::EmbeddingVector(128));
     }
@@ -590,7 +590,7 @@ required = true
     #[test]
     fn test_schema_from_str_invalid_toml_returns_error() {
         let bad = "this is not toml :::";
-        let result = Schema::from_str(bad);
+        let result = Schema::parse_toml(bad);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), DmanError::Toml(_)));
     }
@@ -633,7 +633,7 @@ required = true
     // -----------------------------------------------------------------------
 
     fn make_test_schema() -> SchemaDefinition {
-        Schema::from_str(
+        Schema::parse_toml(
             r#"
 name = "test"
 version = "1"

@@ -1,11 +1,3 @@
-#[cfg(feature = "python")]
-use std::path::Path;
-
-#[cfg(feature = "python")]
-use dman_core::error::{DmanError, Result};
-#[cfg(feature = "python")]
-use dman_core::types::Dataset;
-
 use crate::PluginInfo;
 
 pub struct PythonFormatImporter {
@@ -63,11 +55,11 @@ mod python_impl {
         let c_code =
             CString::new(code.as_str()).map_err(|e| DmanError::PluginError(e.to_string()))?;
         let c_path = CString::new(path_str).map_err(|e| DmanError::PluginError(e.to_string()))?;
-        let c_mod = CString::new("plugin").map_err(|e| DmanError::PluginError(e.to_string()))?;
+        let c_mod = CString::new(path_str).map_err(|e| DmanError::PluginError(e.to_string()))?;
 
         Python::attach(|py| {
             let module = pyo3::types::PyModule::from_code(py, &c_code, &c_path, &c_mod)
-                .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                .map_err(|e| DmanError::PluginError(e.to_string()))?;
             f(py, &module)
         })
     }
@@ -91,7 +83,7 @@ mod python_impl {
                     Ok(fn_detect) => {
                         let result = fn_detect
                             .call1((path_str.as_str(),))
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?;
                         let detected: bool = result
                             .extract()
                             .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
@@ -121,25 +113,25 @@ mod python_impl {
                 with_plugin_module(&plugin_path, |_py, module| {
                     let result = module
                         .call_method1("import_dataset", (path_str.as_str(),))
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
 
                     let dict = result
                         .cast::<PyDict>()
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
 
                     let images_obj = dict
                         .get_item("images")
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?
                         .ok_or_else(|| {
                             DmanError::PluginError("missing 'images' key in result".to_string())
                         })?;
                     let images_list = images_obj
                         .cast::<PyList>()
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
 
                     let anns_obj = dict
                         .get_item("annotations")
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?
                         .ok_or_else(|| {
                             DmanError::PluginError(
                                 "missing 'annotations' key in result".to_string(),
@@ -147,16 +139,16 @@ mod python_impl {
                         })?;
                     let anns_list = anns_obj
                         .cast::<PyList>()
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
 
                     let mut imgs = Vec::new();
                     for item in images_list.iter() {
                         let d = item
                             .cast::<PyDict>()
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?;
                         let file_name: String = d
                             .get_item("file_name")
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?
                             .ok_or_else(|| {
                                 DmanError::PluginError("image dict missing 'file_name'".to_string())
                             })?
@@ -169,10 +161,10 @@ mod python_impl {
                     for item in anns_list.iter() {
                         let d = item
                             .cast::<PyDict>()
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?;
                         let image_file_name: String = d
                             .get_item("image_file_name")
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?
                             .ok_or_else(|| {
                                 DmanError::PluginError(
                                     "annotation dict missing 'image_file_name'".to_string(),
@@ -182,7 +174,7 @@ mod python_impl {
                             .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
                         let category: String = d
                             .get_item("category")
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?
                             .ok_or_else(|| {
                                 DmanError::PluginError(
                                     "annotation dict missing 'category'".to_string(),
@@ -192,7 +184,7 @@ mod python_impl {
                             .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
                         let bbox_list = d
                             .get_item("bbox")
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?
                             .ok_or_else(|| {
                                 DmanError::PluginError("annotation dict missing 'bbox'".to_string())
                             })?;
@@ -371,20 +363,20 @@ mod python_impl {
                 for img in &images {
                     let d = PyDict::new(py);
                     d.set_item("file_name", &img.file_name)
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
                     d.set_item("file_path", &img.file_path)
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
                     if let Some(w) = img.width {
                         d.set_item("width", w)
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?;
                     }
                     if let Some(h) = img.height {
                         d.set_item("height", h)
-                            .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                            .map_err(|e| DmanError::PluginError(e.to_string()))?;
                     }
                     py_images
                         .append(d)
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
                 }
 
                 let py_annotations = PyList::empty(py);
@@ -411,27 +403,27 @@ mod python_impl {
 
                     let d = PyDict::new(py);
                     d.set_item("image_file_name", &image_file_name)
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
                     d.set_item("category", &ann.category)
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
                     d.set_item("bbox", bbox_vec)
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
                     py_annotations
                         .append(d)
-                        .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                        .map_err(|e| DmanError::PluginError(e.to_string()))?;
                 }
 
                 let data_dict = PyDict::new(py);
                 data_dict
                     .set_item("images", py_images)
-                    .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                    .map_err(|e| DmanError::PluginError(e.to_string()))?;
                 data_dict
                     .set_item("annotations", py_annotations)
-                    .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                    .map_err(|e| DmanError::PluginError(e.to_string()))?;
 
                 module
                     .call_method1("export_dataset", (data_dict, output_path_str.as_str()))
-                    .map_err(|e: PyErr| DmanError::PluginError(e.to_string()))?;
+                    .map_err(|e| DmanError::PluginError(e.to_string()))?;
 
                 Ok(())
             })
@@ -492,6 +484,7 @@ mod tests {
     #[cfg(feature = "python")]
     #[test]
     fn test_detect_returns_false_when_no_detect_fn() {
+        use dman_core::formats::FormatImporter;
         use std::io::Write;
         let tmp = tempfile::NamedTempFile::with_suffix(".py").expect("tempfile");
         writeln!(
@@ -516,6 +509,7 @@ def export_dataset(data, path):
     #[cfg(feature = "python")]
     #[test]
     fn test_detect_calls_plugin_detect_fn() {
+        use dman_core::formats::FormatImporter;
         use std::io::Write;
         let tmp = tempfile::NamedTempFile::with_suffix(".py").expect("tempfile");
         writeln!(

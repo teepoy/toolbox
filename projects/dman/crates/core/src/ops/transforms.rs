@@ -126,7 +126,7 @@ fn filter_by_metadata_eq(images: &[Image], key: &str, value: &serde_json::Value)
         .iter()
         .filter(|img| {
             if let Some(meta) = &img.metadata {
-                meta.get(key).map_or(false, |v| v == value)
+                meta.get(key) == Some(value)
             } else {
                 false
             }
@@ -163,10 +163,10 @@ fn apply_filter_op(
     match op {
         FilterOp::Eq => img_val == filter_val,
         FilterOp::Ne => img_val != filter_val,
-        FilterOp::Gt => compare_json(img_val, filter_val).map_or(false, |o| o > 0),
-        FilterOp::Lt => compare_json(img_val, filter_val).map_or(false, |o| o < 0),
-        FilterOp::Gte => compare_json(img_val, filter_val).map_or(false, |o| o >= 0),
-        FilterOp::Lte => compare_json(img_val, filter_val).map_or(false, |o| o <= 0),
+        FilterOp::Gt => compare_json(img_val, filter_val).is_some_and(|o| o > 0),
+        FilterOp::Lt => compare_json(img_val, filter_val).is_some_and(|o| o < 0),
+        FilterOp::Gte => compare_json(img_val, filter_val).is_some_and(|o| o >= 0),
+        FilterOp::Lte => compare_json(img_val, filter_val).is_some_and(|o| o <= 0),
         FilterOp::Contains => {
             if let (Some(s), Some(pat)) = (img_val.as_str(), filter_val.as_str()) {
                 s.contains(pat)
@@ -253,7 +253,7 @@ fn insert_image_ref(db: &Database, dst_dataset_id: i64, img: &Image) -> Result<i
     let metadata_str = img
         .metadata
         .as_ref()
-        .map(|m| serde_json::to_string(m))
+        .map(serde_json::to_string)
         .transpose()?;
 
     db.conn.execute(
@@ -504,10 +504,10 @@ fn try_imagemagick(path: &str, geometry: &str) -> Result<bool> {
 }
 
 fn try_python_pil(path: &str, width: u32, height: u32) -> Result<bool> {
+    let repr_open = format!("{:?}", path);
+    let repr_save = format!("{:?}", path);
     let script = format!(
         "from PIL import Image; img = Image.open({repr_open}); img = img.resize(({width}, {height})); img.save({repr_save})",
-        repr_open = format!("{:?}", path),
-        repr_save = format!("{:?}", path),
     );
     let output = std::process::Command::new("python3")
         .args(["-c", &script])

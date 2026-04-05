@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{DmanError, Result};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DmanConfig {
     #[serde(default)]
@@ -72,17 +72,6 @@ impl DmanConfig {
             toml::to_string_pretty(self).map_err(|err| DmanError::ConfigError(err.to_string()))?;
         fs::write(path, contents)?;
         Ok(())
-    }
-}
-
-impl Default for DmanConfig {
-    fn default() -> Self {
-        Self {
-            storage: StorageConfig::default(),
-            server: ServerConfig::default(),
-            python: PythonConfig::default(),
-            ui: UiConfig::default(),
-        }
     }
 }
 

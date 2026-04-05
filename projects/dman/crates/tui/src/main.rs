@@ -163,17 +163,16 @@ fn handle_key_detail(app: &mut App, key: KeyEvent, current_tab: usize, current_s
             }
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            if current_tab == 1 {
-                if let View::Detail {
+            if current_tab == 1
+                && let View::Detail {
                     dataset_name, tab, ..
                 } = &app.view
-                {
-                    app.view = View::Detail {
-                        dataset_name: dataset_name.clone(),
-                        tab: *tab,
-                        scroll: current_scroll.saturating_sub(1),
-                    };
-                }
+            {
+                app.view = View::Detail {
+                    dataset_name: dataset_name.clone(),
+                    tab: *tab,
+                    scroll: current_scroll.saturating_sub(1),
+                };
             }
         }
         _ => {}
@@ -711,10 +710,10 @@ fn run_app(
     loop {
         terminal.draw(|f| ui(f, app))?;
 
-        if crossterm::event::poll(std::time::Duration::from_millis(100))? {
-            if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
-                handle_key(app, key);
-            }
+        if crossterm::event::poll(std::time::Duration::from_millis(100))?
+            && let crossterm::event::Event::Key(key) = crossterm::event::read()?
+        {
+            handle_key(app, key);
         }
 
         if app.should_quit {

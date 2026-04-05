@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 
 use axum::{
@@ -49,7 +49,7 @@ pub struct Pagination {
 fn paginate<T>(items: Vec<T>, page: usize, per_page: usize) -> (Vec<T>, Pagination) {
     let total = items.len();
     let page = page.max(1);
-    let per_page = per_page.max(1).min(500);
+    let per_page = per_page.clamp(1, 500);
     let offset = (page - 1) * per_page;
     let data = items.into_iter().skip(offset).take(per_page).collect();
     let pagination = Pagination { page, per_page, total };
@@ -74,7 +74,7 @@ fn api_error(code: &str, message: impl Into<String>) -> (StatusCode, Json<Value>
     (status, Json(json!({ "error": { "code": code, "message": message.into() } })))
 }
 
-fn open_db(catalog_path: &PathBuf) -> Result<Database, (StatusCode, Json<Value>)> {
+fn open_db(catalog_path: &StdPath) -> Result<Database, (StatusCode, Json<Value>)> {
     let db_path = catalog_path.join("catalog.db");
     Database::open(&db_path).map_err(|e| api_error("DB_ERROR", e.to_string()))
 }
@@ -478,7 +478,7 @@ mod tests {
         std::fs::create_dir_all(&ds_dir).unwrap();
 
         // Register a dataset
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         DatasetService::register(&db, "my-dataset", &ds_dir, DatasetFormat::Yolo).unwrap();
         drop(db);
 
@@ -523,7 +523,7 @@ mod tests {
         let ds_dir = tmp.path().join("filterds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         let ds = DatasetService::register(&db, "filter-ds", &ds_dir, DatasetFormat::Coco).unwrap();
         let dataset_id = ds.id;
 
@@ -606,7 +606,7 @@ mod tests {
         let ds_dir = tmp.path().join("allimgds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         let ds = DatasetService::register(&db, "all-img-ds", &ds_dir, DatasetFormat::Yolo).unwrap();
         let dataset_id = ds.id;
 
@@ -664,7 +664,7 @@ mod tests {
         let ds_dir = tmp.path().join("catds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         let ds = DatasetService::register(&db, "cat-ds", &ds_dir, DatasetFormat::Coco).unwrap();
         db.conn
             .execute(
@@ -707,7 +707,7 @@ mod tests {
         let ds_dir = tmp.path().join("statsds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         let ds = DatasetService::register(&db, "stats-ds", &ds_dir, DatasetFormat::Yolo).unwrap();
         let dataset_id = ds.id;
 
@@ -800,7 +800,7 @@ mod tests {
         let tmp = tempdir().unwrap();
         let catalog = setup_catalog(&tmp);
 
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         // Insert a real dataset first (needed for source_datasets)
         db.conn
             .execute(
@@ -836,7 +836,7 @@ mod tests {
         let ds_dir = tmp.path().join("imgds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         DatasetService::register(&db, "img-ds", &ds_dir, DatasetFormat::Yolo).unwrap();
         drop(db);
 
@@ -861,7 +861,7 @@ mod tests {
         let ds_dir = tmp.path().join("pgds");
         std::fs::create_dir_all(&ds_dir).unwrap();
 
-        let db = Database::open(&catalog.join("catalog.db")).unwrap();
+        let db = Database::open(catalog.join("catalog.db")).unwrap();
         for i in 0..5 {
             DatasetService::register(&db, &format!("ds-{}", i), &ds_dir, DatasetFormat::Yolo)
                 .unwrap();
