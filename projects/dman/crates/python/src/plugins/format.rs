@@ -476,7 +476,14 @@ mod python_impl {
                 annotations: Vec<ParsedAnnotation>,
             }
 
+            let plugin_name = self.info.name.clone();
             let samples: Vec<ParsedSample> = with_plugin_module(&plugin_path, |_py, module| {
+                module.getattr("import_dataset").map_err(|_| {
+                    DmanError::PluginError(format!(
+                        "plugin '{}' is missing required function 'import_dataset'",
+                        plugin_name
+                    ))
+                })?;
                 let result = module
                     .call_method1("import_dataset", (path_str.as_str(),))
                     .map_err(|e| DmanError::PluginError(e.to_string()))?;
@@ -733,6 +740,7 @@ mod python_impl {
                 .to_string();
             let dataset_id = dataset.id;
             let plugin_path = self.info.path.clone();
+            let plugin_name = self.info.name.clone();
 
             let samples = dman_core::dataset::DatasetService::get_samples(db, dataset_id)?;
 
@@ -829,6 +837,15 @@ mod python_impl {
                         .map_err(|e| DmanError::PluginError(e.to_string()))?;
                 }
 
+                module
+                    .getattr("export_dataset")
+                    .map_err(|_| {
+                        DmanError::PluginError(format!(
+                            "plugin '{}' is missing required function 'export_dataset'",
+                            plugin_name
+                        ))
+                    })
+                    .map(|_| ())?;
                 module
                     .call_method1("export_dataset", (py_samples, output_path_str.as_str()))
                     .map_err(|e| DmanError::PluginError(e.to_string()))?;
@@ -1005,5 +1022,263 @@ def export_dataset(samples, path):
             )
             .expect("count annotations");
         assert_eq!(ann_count, 2, "expected 2 annotations");
+    }
+
+    #[cfg(feature = "python")]
+    #[test]
+    fn test_import_fails_when_no_import_dataset_fn() {
+        use dman_core::formats::FormatImporter;
+        use std::io::Write;
+
+        let tmp = tempfile::NamedTempFile::with_suffix(".py").expect("tempfile");
+        writeln!(
+            tmp.as_file(),
+            r#"
+dman_plugin = {{"name": "no_import_fn", "type": "format", "version": "1.0.0"}}
+
+def export_dataset(samples, path):
+    pass
+"#
+        )
+        .expect("write plugin");
+
+        let info = PluginInfo::new("no_import_fn", "format", "1.0.0", tmp.path().to_path_buf());
+        let importer = PythonFormatImporter::new(info);
+
+        let tmp_dir = tempfile::TempDir::new().expect("tmpdir");
+        let data_dir = tmp_dir.path().join("data");
+        std::fs::create_dir_all(&data_dir).expect("create data dir");
+
+        let db = dman_core::db::Database::open_in_memory().expect("db");
+        let storage = dman_core::storage::StorageManager::new(tmp_dir.path().to_path_buf());
+
+        let result = importer.import(&db, &storage, &data_dir, "test_ds");
+        assert!(result.is_err(), "expected error for missing import_dataset");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("import_dataset"),
+            "error should mention 'import_dataset', got: {err_msg}"
+        );
+    }
+
+    #[cfg(feature = "python")]
+    #[test]
+    fn test_export_fails_when_no_export_dataset_fn() {
+        use dman_core::formats::FormatExporter;
+        use std::io::Write;
+
+        let tmp = tempfile::NamedTempFile::with_suffix(".py").expect("tempfile");
+        writeln!(
+            tmp.as_file(),
+            r#"
+dman_plugin = {{"name": "no_export_fn", "type": "format", "version": "1.0.0"}}
+
+def import_dataset(path):
+    return []
+"#
+        )
+        .expect("write plugin");
+
+        let info = PluginInfo::new("no_export_fn", "format", "1.0.0", tmp.path().to_path_buf());
+        let exporter = PythonFormatExporter::new(info);
+
+        let tmp_dir = tempfile::TempDir::new().expect("tmpdir");
+        let db = dman_core::db::Database::open_in_memory().expect("db");
+        let storage = dman_core::storage::StorageManager::new(tmp_dir.path().to_path_buf());
+
+        let dataset = dman_core::dataset::DatasetService::register(
+            &db,
+            "test_export_ds",
+            std::path::Path::new("/tmp"),
+            dman_core::types::DatasetFormat::new("no_export_fn"),
+        )
+        .expect("register dataset");
+
+        let output_dir = tmp_dir.path().join("output");
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+
+        let result = exporter.export(&db, &storage, &dataset, &output_dir);
+        assert!(result.is_err(), "expected error for missing export_dataset");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("export_dataset"),
+            "error should mention 'export_dataset', got: {err_msg}"
+        );
+    }
+
+    #[cfg(feature = "python")]
+    #[test]
+    fn test_import_fails_bad_bbox_format() {
+        use dman_core::formats::FormatImporter;
+
+        let tmp_dir = tempfile::TempDir::new().expect("tmpdir");
+        let plugin_file = tmp_dir.path().join("bad_bbox_plugin.py");
+        std::fs::write(
+            &plugin_file,
+            r#"
+dman_plugin = {"name": "bad_bbox", "type": "format", "version": "1.0.0"}
+
+class PyAnnotationData:
+    def __init__(self, category, bbox=None, segmentation=None, keypoints=None, metadata=None):
+        self.category = category
+        self.bbox = bbox
+        self.segmentation = segmentation
+        self.keypoints = keypoints
+        self.metadata = metadata
+
+class PyAssetData:
+    def __init__(self, asset_type, file_name, file_path, width=None, height=None, metadata=None, annotations=None):
+        self.asset_type = asset_type
+        self.file_name = file_name
+        self.file_path = file_path
+        self.width = width
+        self.height = height
+        self.metadata = metadata
+        self.annotations = annotations or []
+
+class PySampleData:
+    def __init__(self, name, metadata=None, assets=None, annotations=None):
+        self.name = name
+        self.metadata = metadata
+        self.assets = assets or []
+        self.annotations = annotations or []
+
+def import_dataset(path):
+    ann = PyAnnotationData("cat", bbox=[10.0, 20.0, 30.0, 40.0])
+    asset = PyAssetData("image", "img.jpg", path + "/img.jpg", annotations=[ann])
+    sample = PySampleData("sample-001", assets=[asset])
+    return [sample]
+
+def export_dataset(samples, path):
+    pass
+"#,
+        )
+        .expect("write plugin");
+
+        let info = PluginInfo::new("bad_bbox", "format", "1.0.0", plugin_file);
+        let importer = PythonFormatImporter::new(info);
+
+        let data_dir = tmp_dir.path().join("data");
+        std::fs::create_dir_all(&data_dir).expect("create data dir");
+
+        let db = dman_core::db::Database::open_in_memory().expect("db");
+        let storage = dman_core::storage::StorageManager::new(tmp_dir.path().to_path_buf());
+
+        let result = importer.import(&db, &storage, &data_dir, "bad_bbox_ds");
+        assert!(result.is_err(), "expected error for bad bbox format");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("bbox"),
+            "error should mention 'bbox', got: {err_msg}"
+        );
+    }
+
+    #[cfg(feature = "python")]
+    #[test]
+    fn test_import_with_sample_level_annotations() {
+        use dman_core::formats::FormatImporter;
+
+        let tmp_dir = tempfile::TempDir::new().expect("tmpdir");
+        let plugin_file = tmp_dir.path().join("sample_ann_plugin.py");
+        std::fs::write(
+            &plugin_file,
+            r#"
+dman_plugin = {"name": "sample_ann_fmt", "type": "format", "version": "1.0.0"}
+
+class PyAnnotationData:
+    def __init__(self, category, bbox=None, segmentation=None, keypoints=None, metadata=None):
+        self.category = category
+        self.bbox = bbox
+        self.segmentation = segmentation
+        self.keypoints = keypoints
+        self.metadata = metadata
+
+class PySampleData:
+    def __init__(self, name, metadata=None, assets=None, annotations=None):
+        self.name = name
+        self.metadata = metadata
+        self.assets = assets or []
+        self.annotations = annotations or []
+
+def import_dataset(path):
+    ann = PyAnnotationData("cat", bbox={"x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0})
+    sample = PySampleData("sample-001", annotations=[ann], assets=[])
+    return [sample]
+
+def export_dataset(samples, path):
+    pass
+"#,
+        )
+        .expect("write plugin");
+
+        let info = PluginInfo::new("sample_ann_fmt", "format", "1.0.0", plugin_file);
+        let importer = PythonFormatImporter::new(info);
+
+        let data_dir = tmp_dir.path().join("data");
+        std::fs::create_dir_all(&data_dir).expect("create data dir");
+
+        let db = dman_core::db::Database::open_in_memory().expect("db");
+        let storage = dman_core::storage::StorageManager::new(tmp_dir.path().to_path_buf());
+
+        let dataset = importer
+            .import(&db, &storage, &data_dir, "sample_ann_ds")
+            .expect("import should succeed");
+
+        let ann_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM annotations WHERE sample_id IN \
+                 (SELECT id FROM samples WHERE dataset_id = ?1)",
+                rusqlite::params![dataset.id],
+                |row| row.get(0),
+            )
+            .expect("count annotations");
+        assert_eq!(ann_count, 1, "expected 1 sample-level annotation");
+    }
+
+    #[cfg(feature = "python")]
+    #[test]
+    fn test_import_empty_samples_list() {
+        use dman_core::formats::FormatImporter;
+        use std::io::Write;
+
+        let tmp = tempfile::NamedTempFile::with_suffix(".py").expect("tempfile");
+        writeln!(
+            tmp.as_file(),
+            r#"
+dman_plugin = {{"name": "empty_fmt", "type": "format", "version": "1.0.0"}}
+
+def import_dataset(path):
+    return []
+
+def export_dataset(samples, path):
+    pass
+"#
+        )
+        .expect("write plugin");
+
+        let info = PluginInfo::new("empty_fmt", "format", "1.0.0", tmp.path().to_path_buf());
+        let importer = PythonFormatImporter::new(info);
+
+        let tmp_dir = tempfile::TempDir::new().expect("tmpdir");
+        let data_dir = tmp_dir.path().join("data");
+        std::fs::create_dir_all(&data_dir).expect("create data dir");
+
+        let db = dman_core::db::Database::open_in_memory().expect("db");
+        let storage = dman_core::storage::StorageManager::new(tmp_dir.path().to_path_buf());
+
+        let dataset = importer
+            .import(&db, &storage, &data_dir, "empty_ds")
+            .expect("import should succeed with empty list");
+
+        let sample_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM samples WHERE dataset_id = ?1",
+                rusqlite::params![dataset.id],
+                |row| row.get(0),
+            )
+            .expect("count samples");
+        assert_eq!(sample_count, 0, "expected 0 samples");
     }
 }

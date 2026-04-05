@@ -8,3 +8,4 @@
   - [Python SDK](./features/python-sdk.md)
   - [Label Studio](./features/label-studio.md)
   - [TUI](./features/tui.md)
+  - [Custom format registration](./features/custom-format-registration.md)
