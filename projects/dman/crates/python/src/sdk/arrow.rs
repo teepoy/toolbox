@@ -10,8 +10,8 @@ pub(crate) use python_impl::*;
 pub mod python_impl {
     use std::sync::Arc;
 
-    use arrow_array::RecordBatch;
     use arrow_array::builder::{Float64Builder, Int64Builder, LargeListBuilder, StringBuilder};
+    use arrow_array::RecordBatch;
     use arrow_schema::{DataType, Field, Schema};
 
     use super::super::loader::python_impl::{AnnotationRow, AssetRow, SampleRow};
@@ -340,16 +340,48 @@ pub mod python_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use arrow_array::cast::AsArray;
+        use arrow_array::Array;
+        use arrow_schema::DataType;
+
+        // ── helpers ──────────────────────────────────────────────────────
+
+        /// Assert that a RecordBatch field at `idx` has the expected name,
+        /// data-type, and nullability.
+        fn assert_field(
+            batch: &RecordBatch,
+            idx: usize,
+            name: &str,
+            dt: &DataType,
+            nullable: bool,
+        ) {
+            let schema = batch.schema();
+            let field = schema.field(idx);
+            assert_eq!(field.name(), name, "field {idx} name mismatch");
+            assert_eq!(field.data_type(), dt, "field {idx} ({name}) type mismatch");
+            assert_eq!(
+                field.is_nullable(),
+                nullable,
+                "field {idx} ({name}) nullable mismatch"
+            );
+        }
+
+        // ── samples ─────────────────────────────────────────────────────
 
         #[test]
-        fn samples_empty_batch() {
+        fn samples_empty_batch_has_correct_schema() {
             let batch = samples_to_record_batch(&[]).unwrap();
             assert_eq!(batch.num_rows(), 0);
             assert_eq!(batch.num_columns(), 5);
+            assert_field(&batch, 0, "id", &DataType::Int64, false);
+            assert_field(&batch, 1, "dataset_id", &DataType::Int64, false);
+            assert_field(&batch, 2, "name", &DataType::Utf8, false);
+            assert_field(&batch, 3, "metadata", &DataType::Utf8, true);
+            assert_field(&batch, 4, "created_at", &DataType::Utf8, true);
         }
 
         #[test]
-        fn samples_round_trip() {
+        fn samples_round_trip_values_and_nulls() {
             let rows = vec![
                 SampleRow {
                     id: 1,
@@ -368,29 +400,134 @@ pub mod python_impl {
             ];
             let batch = samples_to_record_batch(&rows).unwrap();
             assert_eq!(batch.num_rows(), 2);
-            assert_eq!(batch.num_columns(), 5);
+
+            // Non-null columns: check values
+            let ids = batch
+                .column(0)
+                .as_primitive::<arrow_array::types::Int64Type>();
+            assert_eq!(ids.value(0), 1);
+            assert_eq!(ids.value(1), 2);
+
+            let names = batch.column(2).as_string::<i32>();
+            assert_eq!(names.value(0), "frame001");
+            assert_eq!(names.value(1), "frame002");
+
+            // Nullable columns: check null pattern
+            assert!(!batch.column(3).is_null(0)); // metadata present
+            assert!(batch.column(3).is_null(1)); // metadata absent
+            assert!(!batch.column(4).is_null(0)); // created_at present
+            assert!(batch.column(4).is_null(1)); // created_at absent
         }
 
+        // ── assets ──────────────────────────────────────────────────────
+
         #[test]
-        fn assets_round_trip() {
-            let rows = vec![AssetRow {
-                id: 1,
-                sample_id: 1,
-                asset_type: "image".into(),
-                file_name: "img.jpg".into(),
-                file_path: "/data/img.jpg".into(),
-                width: Some(640),
-                height: Some(480),
-                hash: Some("abc123".into()),
-                metadata: None,
-            }];
-            let batch = assets_to_record_batch(&rows).unwrap();
-            assert_eq!(batch.num_rows(), 1);
+        fn assets_empty_batch_has_correct_schema() {
+            let batch = assets_to_record_batch(&[]).unwrap();
+            assert_eq!(batch.num_rows(), 0);
             assert_eq!(batch.num_columns(), 9);
+            assert_field(&batch, 0, "id", &DataType::Int64, false);
+            assert_field(&batch, 1, "sample_id", &DataType::Int64, false);
+            assert_field(&batch, 2, "asset_type", &DataType::Utf8, false);
+            assert_field(&batch, 3, "file_name", &DataType::Utf8, false);
+            assert_field(&batch, 4, "file_path", &DataType::Utf8, false);
+            assert_field(&batch, 5, "width", &DataType::Int64, true);
+            assert_field(&batch, 6, "height", &DataType::Int64, true);
+            assert_field(&batch, 7, "hash", &DataType::Utf8, true);
+            assert_field(&batch, 8, "metadata", &DataType::Utf8, true);
         }
 
         #[test]
-        fn annotations_with_bbox_and_keypoints() {
+        fn assets_round_trip_with_nullable_fields() {
+            let rows = vec![
+                AssetRow {
+                    id: 1,
+                    sample_id: 1,
+                    asset_type: "image".into(),
+                    file_name: "img.jpg".into(),
+                    file_path: "/data/img.jpg".into(),
+                    width: Some(640),
+                    height: Some(480),
+                    hash: Some("abc123".into()),
+                    metadata: None,
+                },
+                AssetRow {
+                    id: 2,
+                    sample_id: 1,
+                    asset_type: "depth_map".into(),
+                    file_name: "depth.png".into(),
+                    file_path: "/data/depth.png".into(),
+                    width: None,
+                    height: None,
+                    hash: None,
+                    metadata: Some(r#"{"source":"lidar"}"#.into()),
+                },
+            ];
+            let batch = assets_to_record_batch(&rows).unwrap();
+            assert_eq!(batch.num_rows(), 2);
+
+            // width: row 0 = 640, row 1 = null
+            let width = batch
+                .column(5)
+                .as_primitive::<arrow_array::types::Int64Type>();
+            assert_eq!(width.value(0), 640);
+            assert!(batch.column(5).is_null(1));
+
+            // metadata: row 0 = null, row 1 = present
+            assert!(batch.column(8).is_null(0));
+            assert!(!batch.column(8).is_null(1));
+        }
+
+        // ── annotations ─────────────────────────────────────────────────
+
+        #[test]
+        fn annotations_empty_batch_has_correct_schema() {
+            let batch = annotations_to_record_batch(&[]).unwrap();
+            assert_eq!(batch.num_rows(), 0);
+            assert_eq!(batch.num_columns(), 11);
+            assert_field(&batch, 0, "id", &DataType::Int64, false);
+            assert_field(&batch, 1, "sample_id", &DataType::Int64, false);
+            assert_field(&batch, 2, "asset_id", &DataType::Int64, true);
+            assert_field(&batch, 3, "category_id", &DataType::Int64, true);
+            assert_field(&batch, 4, "bbox_x", &DataType::Float64, true);
+            assert_field(&batch, 5, "bbox_y", &DataType::Float64, true);
+            assert_field(&batch, 6, "bbox_w", &DataType::Float64, true);
+            assert_field(&batch, 7, "bbox_h", &DataType::Float64, true);
+
+            // segmentation: LargeList<LargeList<Float64>>
+            let schema = batch.schema();
+            let seg_field = schema.field(8);
+            assert_eq!(seg_field.name(), "segmentation");
+            assert!(seg_field.is_nullable());
+            match seg_field.data_type() {
+                DataType::LargeList(inner) => {
+                    assert_eq!(inner.name(), "item");
+                    match inner.data_type() {
+                        DataType::LargeList(innermost) => {
+                            assert_eq!(innermost.data_type(), &DataType::Float64);
+                        }
+                        other => panic!("expected LargeList inner, got {other:?}"),
+                    }
+                }
+                other => panic!("expected LargeList for segmentation, got {other:?}"),
+            }
+
+            // keypoints: LargeList<Float64>
+            let kp_field = schema.field(9);
+            assert_eq!(kp_field.name(), "keypoints");
+            assert!(kp_field.is_nullable());
+            match kp_field.data_type() {
+                DataType::LargeList(inner) => {
+                    assert_eq!(inner.data_type(), &DataType::Float64);
+                }
+                other => panic!("expected LargeList for keypoints, got {other:?}"),
+            }
+
+            assert_field(&batch, 10, "metadata", &DataType::Utf8, true);
+        }
+
+        #[test]
+        fn annotations_bbox_values_round_trip() {
             let rows = vec![AnnotationRow {
                 id: 1,
                 sample_id: 1,
@@ -403,13 +540,27 @@ pub mod python_impl {
             }];
             let batch = annotations_to_record_batch(&rows).unwrap();
             assert_eq!(batch.num_rows(), 1);
-            assert_eq!(batch.num_columns(), 11);
 
-            use arrow_array::cast::AsArray;
             let bbox_x = batch
                 .column(4)
                 .as_primitive::<arrow_array::types::Float64Type>();
+            let bbox_y = batch
+                .column(5)
+                .as_primitive::<arrow_array::types::Float64Type>();
+            let bbox_w = batch
+                .column(6)
+                .as_primitive::<arrow_array::types::Float64Type>();
+            let bbox_h = batch
+                .column(7)
+                .as_primitive::<arrow_array::types::Float64Type>();
             assert!((bbox_x.value(0) - 10.0).abs() < f64::EPSILON);
+            assert!((bbox_y.value(0) - 20.0).abs() < f64::EPSILON);
+            assert!((bbox_w.value(0) - 30.0).abs() < f64::EPSILON);
+            assert!((bbox_h.value(0) - 40.0).abs() < f64::EPSILON);
+
+            // asset_id and category_id non-null
+            assert!(!batch.column(2).is_null(0));
+            assert!(!batch.column(3).is_null(0));
         }
 
         #[test]
@@ -427,16 +578,104 @@ pub mod python_impl {
             let batch = annotations_to_record_batch(&rows).unwrap();
             assert_eq!(batch.num_rows(), 1);
 
-            assert!(batch.column(4).is_null(0));
-            assert!(batch.column(5).is_null(0));
-            assert!(batch.column(6).is_null(0));
-            assert!(batch.column(7).is_null(0));
-            assert!(batch.column(8).is_null(0));
-            assert!(batch.column(9).is_null(0));
+            // All optional columns should be null
+            for col_idx in [2, 3, 4, 5, 6, 7, 8, 9, 10] {
+                assert!(
+                    batch.column(col_idx).is_null(0),
+                    "column {col_idx} ({}) should be null",
+                    batch.schema().field(col_idx).name()
+                );
+            }
         }
 
         #[test]
-        fn categories_round_trip() {
+        fn annotations_malformed_bbox_produces_nulls() {
+            let rows = vec![AnnotationRow {
+                id: 1,
+                sample_id: 1,
+                asset_id: None,
+                category_id: None,
+                bbox: Some("not valid json".into()),
+                segmentation: None,
+                keypoints: None,
+                metadata: None,
+            }];
+            let batch = annotations_to_record_batch(&rows).unwrap();
+            assert_eq!(batch.num_rows(), 1);
+            // Malformed bbox should produce null for all 4 bbox columns
+            assert!(batch.column(4).is_null(0), "bbox_x should be null");
+            assert!(batch.column(5).is_null(0), "bbox_y should be null");
+            assert!(batch.column(6).is_null(0), "bbox_w should be null");
+            assert!(batch.column(7).is_null(0), "bbox_h should be null");
+        }
+
+        #[test]
+        fn annotations_malformed_segmentation_produces_null() {
+            let rows = vec![AnnotationRow {
+                id: 1,
+                sample_id: 1,
+                asset_id: None,
+                category_id: None,
+                bbox: None,
+                segmentation: Some("{bad}".into()),
+                keypoints: None,
+                metadata: None,
+            }];
+            let batch = annotations_to_record_batch(&rows).unwrap();
+            assert_eq!(batch.num_rows(), 1);
+            assert!(batch.column(8).is_null(0), "segmentation should be null");
+        }
+
+        #[test]
+        fn annotations_malformed_keypoints_produces_null() {
+            let rows = vec![AnnotationRow {
+                id: 1,
+                sample_id: 1,
+                asset_id: None,
+                category_id: None,
+                bbox: None,
+                segmentation: None,
+                keypoints: Some("not an array".into()),
+                metadata: None,
+            }];
+            let batch = annotations_to_record_batch(&rows).unwrap();
+            assert_eq!(batch.num_rows(), 1);
+            assert!(batch.column(9).is_null(0), "keypoints should be null");
+        }
+
+        #[test]
+        fn annotations_bbox_missing_fields_produces_nulls() {
+            // Valid JSON but missing required bbox keys
+            let rows = vec![AnnotationRow {
+                id: 1,
+                sample_id: 1,
+                asset_id: None,
+                category_id: None,
+                bbox: Some(r#"{"x":1.0,"y":2.0}"#.into()), // missing width+height
+                segmentation: None,
+                keypoints: None,
+                metadata: None,
+            }];
+            let batch = annotations_to_record_batch(&rows).unwrap();
+            assert!(batch.column(4).is_null(0), "bbox_x should be null");
+            assert!(batch.column(5).is_null(0), "bbox_y should be null");
+        }
+
+        // ── categories ──────────────────────────────────────────────────
+
+        #[test]
+        fn categories_empty_batch_has_correct_schema() {
+            let batch = categories_to_record_batch(&[]).unwrap();
+            assert_eq!(batch.num_rows(), 0);
+            assert_eq!(batch.num_columns(), 4);
+            assert_field(&batch, 0, "id", &DataType::Int64, false);
+            assert_field(&batch, 1, "dataset_id", &DataType::Int64, false);
+            assert_field(&batch, 2, "name", &DataType::Utf8, false);
+            assert_field(&batch, 3, "supercategory", &DataType::Utf8, true);
+        }
+
+        #[test]
+        fn categories_round_trip_with_null_supercategory() {
             let rows = vec![
                 CategoryRow {
                     id: 0,
@@ -453,7 +692,16 @@ pub mod python_impl {
             ];
             let batch = categories_to_record_batch(&rows).unwrap();
             assert_eq!(batch.num_rows(), 2);
-            assert_eq!(batch.num_columns(), 4);
+
+            let names = batch.column(2).as_string::<i32>();
+            assert_eq!(names.value(0), "person");
+            assert_eq!(names.value(1), "car");
+
+            // supercategory: row 0 present, row 1 null
+            assert!(!batch.column(3).is_null(0));
+            assert!(batch.column(3).is_null(1));
+            let supercat = batch.column(3).as_string::<i32>();
+            assert_eq!(supercat.value(0), "human");
         }
     }
 }

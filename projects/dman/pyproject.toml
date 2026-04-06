@@ -12,6 +12,6 @@ description = "dman Python bindings and CLI entrypoint"
 dman = "dman:main"
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
+features = ["pyo3/extension-module", "python"]
 manifest-path = "crates/python/Cargo.toml"
 python-source = "python"

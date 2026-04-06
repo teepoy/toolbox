@@ -60,6 +60,8 @@ pub mod python_impl {
         pub(crate) name: String,
         pub(crate) sample_rows: Vec<SampleRow>,
         pub(crate) asset_rows: Vec<AssetRow>,
+        pub(crate) annotation_rows: Vec<AnnotationRow>,
+        pub(crate) category_rows: Vec<crate::sdk::arrow::CategoryRow>,
     }
 
     impl DmanDataset {
@@ -136,85 +138,6 @@ pub mod python_impl {
             Ok(rows)
         }
 
-        /// Load annotations for a sample (optionally filtered to a specific asset).
-        fn load_annotations_for_sample(
-            db: &Database,
-            sample_id: i64,
-        ) -> PyResult<Vec<AnnotationRow>> {
-            let mut stmt = db
-                .conn
-                .prepare(
-                    "SELECT id, sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata \
-                     FROM annotations WHERE sample_id = ?1 ORDER BY id",
-                )
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB prepare error: {e}"))
-                })?;
-
-            let rows = stmt
-                .query_map(rusqlite::params![sample_id], |row| {
-                    Ok(AnnotationRow {
-                        id: row.get(0)?,
-                        sample_id: row.get(1)?,
-                        asset_id: row.get(2)?,
-                        category_id: row.get(3)?,
-                        bbox: row.get(4)?,
-                        segmentation: row.get(5)?,
-                        keypoints: row.get(6)?,
-                        metadata: row.get(7)?,
-                    })
-                })
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB query error: {e}"))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB row error: {e}"))
-                })?;
-
-            Ok(rows)
-        }
-
-        /// Load annotations for a specific asset.
-        fn load_annotations_for_asset(
-            db: &Database,
-            asset_id: i64,
-        ) -> PyResult<Vec<AnnotationRow>> {
-            let mut stmt = db
-                .conn
-                .prepare(
-                    "SELECT id, sample_id, asset_id, category_id, bbox, segmentation, keypoints, metadata \
-                     FROM annotations WHERE asset_id = ?1 ORDER BY id",
-                )
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB prepare error: {e}"))
-                })?;
-
-            let rows = stmt
-                .query_map(rusqlite::params![asset_id], |row| {
-                    Ok(AnnotationRow {
-                        id: row.get(0)?,
-                        sample_id: row.get(1)?,
-                        asset_id: row.get(2)?,
-                        category_id: row.get(3)?,
-                        bbox: row.get(4)?,
-                        segmentation: row.get(5)?,
-                        keypoints: row.get(6)?,
-                        metadata: row.get(7)?,
-                    })
-                })
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB query error: {e}"))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB row error: {e}"))
-                })?;
-
-            Ok(rows)
-        }
-
-        /// Open the default catalog DB (respects `$DMAN_HOME`).
         fn open_catalog_db() -> PyResult<Database> {
             let home = Catalog::home_path();
             let db_path = home.join("catalog.db");
@@ -228,13 +151,11 @@ pub mod python_impl {
             })
         }
 
-        /// Build a `DmanDataset` from a raw name using the default catalog.
         pub fn from_name(name: &str) -> PyResult<Self> {
             let db = Self::open_catalog_db()?;
             Self::from_name_with_db(&db, name)
         }
 
-        /// Build a `DmanDataset` from a raw name using an explicit `Database`.
         pub fn from_name_with_db(db: &Database, name: &str) -> PyResult<Self> {
             let dataset = DatasetService::get(db, name).map_err(|e| match e {
                 DmanError::DatasetNotFound(_) => pyo3::exceptions::PyValueError::new_err(format!(
@@ -248,16 +169,19 @@ pub mod python_impl {
 
             let sample_rows = Self::load_samples(db, dataset.id)?;
             let asset_rows = Self::load_assets_for_dataset(db, dataset.id)?;
+            let annotation_rows = Self::load_annotations_for_dataset(db, dataset.id)?;
+            let category_rows = Self::load_categories(db, dataset.id)?;
 
             Ok(DmanDataset {
                 dataset_id: dataset.id,
                 name: dataset.name,
                 sample_rows,
                 asset_rows,
+                annotation_rows,
+                category_rows,
             })
         }
 
-        /// Build an annotation PyDict from an AnnotationRow.
         fn annotation_to_dict<'py>(
             py: Python<'py>,
             ann: &AnnotationRow,
@@ -292,7 +216,6 @@ pub mod python_impl {
             Ok(ad)
         }
 
-        /// Returns file_paths of all assets with asset_type = "image".
         pub(crate) fn image_paths(&self) -> Vec<String> {
             self.asset_rows
                 .iter()
@@ -438,8 +361,11 @@ pub mod python_impl {
                 .iter()
                 .filter(|a| a.sample_id == sample.id)
                 .collect();
-            let db = Self::open_catalog_db()?;
-            let anns = Self::load_annotations_for_sample(&db, sample.id)?;
+            let anns: Vec<&AnnotationRow> = self
+                .annotation_rows
+                .iter()
+                .filter(|a| a.sample_id == sample.id)
+                .collect();
 
             Python::attach(|py| {
                 let d = PyDict::new(py);
@@ -567,8 +493,6 @@ pub mod python_impl {
         ///   asset_name: Optional asset file_name to filter annotations to a specific asset.
         #[pyo3(signature = (sample_name, asset_name=None))]
         fn annotations(&self, sample_name: &str, asset_name: Option<&str>) -> PyResult<Py<PyAny>> {
-            let db = Self::open_catalog_db()?;
-
             let maybe_sample = self.sample_rows.iter().find(|s| s.name == sample_name);
             let sample = match maybe_sample {
                 None => {
@@ -600,9 +524,17 @@ pub mod python_impl {
                 }
             };
 
-            let anns = match asset_id_filter {
-                None => Self::load_annotations_for_sample(&db, sample.id)?,
-                Some(aid) => Self::load_annotations_for_asset(&db, aid)?,
+            let anns: Vec<&AnnotationRow> = match asset_id_filter {
+                None => self
+                    .annotation_rows
+                    .iter()
+                    .filter(|a| a.sample_id == sample.id)
+                    .collect(),
+                Some(aid) => self
+                    .annotation_rows
+                    .iter()
+                    .filter(|a| a.asset_id == Some(aid))
+                    .collect(),
             };
 
             Python::attach(|py| {
@@ -728,6 +660,16 @@ pub mod python_impl {
             self.asset_rows.len()
         }
 
+        /// Number of annotations in the dataset.
+        fn annotation_count(&self) -> usize {
+            self.annotation_rows.len()
+        }
+
+        /// Number of categories in the dataset.
+        fn category_count(&self) -> usize {
+            self.category_rows.len()
+        }
+
         // ─── Arrow RecordBatch methods ──────────────────────────────────────
 
         fn samples_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -757,11 +699,10 @@ pub mod python_impl {
         }
 
         fn annotations_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-            let db = Self::open_catalog_db()?;
-            let rows = Self::load_annotations_for_dataset(&db, self.dataset_id)?;
-            let batch = crate::sdk::arrow::annotations_to_record_batch(&rows).map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
-            })?;
+            let batch = crate::sdk::arrow::annotations_to_record_batch(&self.annotation_rows)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+                })?;
             let pyarrow = pyo3_arrow::PyRecordBatch::new(batch)
                 .into_pyarrow(py)
                 .map_err(|e| {
@@ -771,11 +712,10 @@ pub mod python_impl {
         }
 
         fn categories_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-            let db = Self::open_catalog_db()?;
-            let rows = Self::load_categories(&db, self.dataset_id)?;
-            let batch = crate::sdk::arrow::categories_to_record_batch(&rows).map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
-            })?;
+            let batch = crate::sdk::arrow::categories_to_record_batch(&self.category_rows)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+                })?;
             let pyarrow = pyo3_arrow::PyRecordBatch::new(batch)
                 .into_pyarrow(py)
                 .map_err(|e| {
@@ -787,22 +727,19 @@ pub mod python_impl {
         fn to_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
             let samples = self.samples_arrow(py)?;
             let assets = self.assets_arrow(py)?;
-            let db = Self::open_catalog_db()?;
 
-            let ann_rows = Self::load_annotations_for_dataset(&db, self.dataset_id)?;
-            let ann_batch =
-                crate::sdk::arrow::annotations_to_record_batch(&ann_rows).map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
-                })?;
+            let ann_batch = crate::sdk::arrow::annotations_to_record_batch(&self.annotation_rows)
+                .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+            })?;
             let annotations = pyo3_arrow::PyRecordBatch::new(ann_batch)
                 .into_pyarrow(py)
                 .map_err(|e| {
                     pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow export error: {e}"))
                 })?;
 
-            let cat_rows = Self::load_categories(&db, self.dataset_id)?;
-            let cat_batch =
-                crate::sdk::arrow::categories_to_record_batch(&cat_rows).map_err(|e| {
+            let cat_batch = crate::sdk::arrow::categories_to_record_batch(&self.category_rows)
+                .map_err(|e| {
                     pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
                 })?;
             let categories = pyo3_arrow::PyRecordBatch::new(cat_batch)
@@ -1007,17 +944,13 @@ mod tests {
             .map(|s| s.name.clone())
             .expect("sample name");
 
-        // annotations() method requires catalog DB; test via raw row count instead
-        let ann_count: i64 = db
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM annotations WHERE sample_id = ?1",
-                rusqlite::params![sample_id],
-                |r| r.get(0),
-            )
-            .expect("count");
-        assert_eq!(ann_count, 1);
-        // Verify we can find the sample by name
+        // Verify annotations are cached in the struct at construction time
+        assert_eq!(
+            dset.annotation_rows.len(),
+            1,
+            "expected 1 cached annotation"
+        );
+        assert_eq!(dset.annotation_rows[0].sample_id, sample_id);
         assert!(dset.sample_rows.iter().any(|s| s.name == sample_name));
         let _ = tmp;
     }
