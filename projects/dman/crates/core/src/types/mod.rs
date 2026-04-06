@@ -210,6 +210,7 @@ pub struct Prediction {
 pub struct Patch {
     pub id: i64,
     pub asset_id: i64,
+    pub annotation_id: Option<i64>,
     pub bbox: BBox,
     pub file_path: Option<PathBuf>,
     pub metadata: Option<serde_json::Value>,

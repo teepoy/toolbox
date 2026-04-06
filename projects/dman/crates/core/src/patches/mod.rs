@@ -27,6 +27,7 @@ impl PatchService {
         asset_id: i64,
         bbox: &BBox,
         output_dir: &Path,
+        annotation_id: Option<i64>,
     ) -> Result<Patch> {
         let asset_file_path: String = db
             .conn
@@ -66,14 +67,15 @@ impl PatchService {
             .ok_or_else(|| DmanError::StorageError("patch path is not valid UTF-8".to_string()))?;
 
         db.conn.execute(
-            "INSERT INTO patches (asset_id, bbox, file_path) VALUES (?1, ?2, ?3)",
-            rusqlite::params![asset_id, bbox_json, file_path_str],
+            "INSERT INTO patches (asset_id, bbox, file_path, annotation_id) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![asset_id, bbox_json, file_path_str, annotation_id],
         )?;
         let patch_id = db.conn.last_insert_rowid();
 
         Ok(Patch {
             id: patch_id,
             asset_id,
+            annotation_id,
             bbox: bbox.clone(),
             file_path: Some(output_path),
             metadata: None,
@@ -87,7 +89,7 @@ impl PatchService {
         output_dir: &Path,
     ) -> Result<Vec<Patch>> {
         let mut stmt = db.conn.prepare(
-            "SELECT a.asset_id, a.bbox
+            "SELECT a.id, a.asset_id, a.bbox
              FROM annotations a
              JOIN assets ast ON a.asset_id = ast.id
              JOIN samples s ON ast.sample_id = s.id
@@ -97,6 +99,7 @@ impl PatchService {
         )?;
 
         struct Row {
+            annotation_id: i64,
             asset_id: i64,
             bbox_json: String,
         }
@@ -104,8 +107,9 @@ impl PatchService {
         let rows: Vec<Row> = stmt
             .query_map(rusqlite::params![dataset_id], |row| {
                 Ok(Row {
-                    asset_id: row.get(0)?,
-                    bbox_json: row.get(1)?,
+                    annotation_id: row.get(0)?,
+                    asset_id: row.get(1)?,
+                    bbox_json: row.get(2)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -113,14 +117,21 @@ impl PatchService {
         let mut patches = Vec::new();
         for row in rows {
             let bbox: BBox = serde_json::from_str(&row.bbox_json)?;
-            patches.push(Self::extract(db, storage, row.asset_id, &bbox, output_dir)?);
+            patches.push(Self::extract(
+                db,
+                storage,
+                row.asset_id,
+                &bbox,
+                output_dir,
+                Some(row.annotation_id),
+            )?);
         }
         Ok(patches)
     }
 
     pub fn get_by_asset(db: &Database, asset_id: i64) -> Result<Vec<Patch>> {
         let mut stmt = db.conn.prepare(
-            "SELECT id, asset_id, bbox, file_path, metadata FROM patches WHERE asset_id = ?1",
+            "SELECT id, asset_id, annotation_id, bbox, file_path, metadata FROM patches WHERE asset_id = ?1",
         )?;
 
         let rows = stmt
@@ -128,9 +139,10 @@ impl PatchService {
                 Ok(PatchRow {
                     id: row.get(0)?,
                     asset_id: row.get(1)?,
-                    bbox_json: row.get(2)?,
-                    file_path: row.get::<_, Option<String>>(3)?,
-                    metadata_json: row.get::<_, Option<String>>(4)?,
+                    annotation_id: row.get(2)?,
+                    bbox_json: row.get(3)?,
+                    file_path: row.get::<_, Option<String>>(4)?,
+                    metadata_json: row.get::<_, Option<String>>(5)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -140,7 +152,7 @@ impl PatchService {
 
     pub fn get_by_dataset(db: &Database, dataset_id: i64) -> Result<Vec<Patch>> {
         let mut stmt = db.conn.prepare(
-            "SELECT p.id, p.asset_id, p.bbox, p.file_path, p.metadata
+            "SELECT p.id, p.asset_id, p.annotation_id, p.bbox, p.file_path, p.metadata
              FROM patches p
              JOIN assets a ON p.asset_id = a.id
              JOIN samples s ON a.sample_id = s.id
@@ -152,9 +164,10 @@ impl PatchService {
                 Ok(PatchRow {
                     id: row.get(0)?,
                     asset_id: row.get(1)?,
-                    bbox_json: row.get(2)?,
-                    file_path: row.get::<_, Option<String>>(3)?,
-                    metadata_json: row.get::<_, Option<String>>(4)?,
+                    annotation_id: row.get(2)?,
+                    bbox_json: row.get(3)?,
+                    file_path: row.get::<_, Option<String>>(4)?,
+                    metadata_json: row.get::<_, Option<String>>(5)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -193,6 +206,7 @@ impl PatchService {
 struct PatchRow {
     id: i64,
     asset_id: i64,
+    annotation_id: Option<i64>,
     bbox_json: String,
     file_path: Option<String>,
     metadata_json: Option<String>,
@@ -208,6 +222,7 @@ fn row_to_patch(row: PatchRow) -> Result<Patch> {
     Ok(Patch {
         id: row.id,
         asset_id: row.asset_id,
+        annotation_id: row.annotation_id,
         bbox,
         file_path,
         metadata,
@@ -296,6 +311,7 @@ mod tests {
             asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
+            None,
         )
         .unwrap();
 
@@ -311,8 +327,15 @@ mod tests {
 
         let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
         let bbox = full_bbox();
-        let patch =
-            PatchService::extract(&db, &storage, asset_id, &bbox, &tmp.path().join("out")).unwrap();
+        let patch = PatchService::extract(
+            &db,
+            &storage,
+            asset_id,
+            &bbox,
+            &tmp.path().join("out"),
+            None,
+        )
+        .unwrap();
 
         let count: i64 = db
             .conn
@@ -340,6 +363,7 @@ mod tests {
             asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
+            None,
         )
         .unwrap();
 
@@ -362,6 +386,7 @@ mod tests {
             asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
+            None,
         )
         .unwrap();
 
@@ -383,6 +408,7 @@ mod tests {
             asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
+            None,
         )
         .unwrap();
 
@@ -404,6 +430,7 @@ mod tests {
             asset_id,
             &full_bbox(),
             &tmp.path().join("out"),
+            None,
         )
         .unwrap();
 
@@ -464,5 +491,85 @@ mod tests {
 
         let patches = PatchService::get_by_asset(&db, asset_id).unwrap();
         assert!(patches.is_empty());
+    }
+
+    #[test]
+    fn extract_with_annotation_id_round_trip() {
+        let tmp = tempdir().unwrap();
+        let db = Database::open_in_memory().expect("db");
+        let storage = StorageManager::new(tmp.path().to_path_buf());
+
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
+
+        let sample_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT sample_id FROM assets WHERE id = ?1",
+                rusqlite::params![asset_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO annotations (sample_id, asset_id, bbox) VALUES (?1, ?2, ?3)",
+                rusqlite::params![sample_id, asset_id, r#"{"x":0,"y":0,"width":4,"height":4}"#],
+            )
+            .unwrap();
+        let annotation_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+
+        let patch = PatchService::extract(
+            &db,
+            &storage,
+            asset_id,
+            &full_bbox(),
+            &tmp.path().join("out"),
+            Some(annotation_id),
+        )
+        .unwrap();
+
+        assert_eq!(patch.annotation_id, Some(annotation_id));
+
+        let patches = PatchService::get_by_asset(&db, asset_id).unwrap();
+        assert_eq!(patches.len(), 1);
+        assert_eq!(patches[0].annotation_id, Some(annotation_id));
+
+        let dataset_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT dataset_id FROM samples WHERE id = ?1",
+                rusqlite::params![sample_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let patches = PatchService::get_by_dataset(&db, dataset_id).unwrap();
+        assert_eq!(patches.len(), 1);
+        assert_eq!(patches[0].annotation_id, Some(annotation_id));
+    }
+
+    #[test]
+    fn extract_without_annotation_id_stores_null() {
+        let tmp = tempdir().unwrap();
+        let db = Database::open_in_memory().expect("db");
+        let storage = StorageManager::new(tmp.path().to_path_buf());
+
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
+        let patch = PatchService::extract(
+            &db,
+            &storage,
+            asset_id,
+            &full_bbox(),
+            &tmp.path().join("out"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(patch.annotation_id, None);
+
+        let patches = PatchService::get_by_asset(&db, asset_id).unwrap();
+        assert_eq!(patches.len(), 1);
+        assert_eq!(patches[0].annotation_id, None);
     }
 }

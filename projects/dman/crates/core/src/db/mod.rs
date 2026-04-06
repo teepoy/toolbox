@@ -88,7 +88,14 @@ fn migrations() -> Migrations<'static> {
         CREATE INDEX IF NOT EXISTS idx_categories_dataset_id ON categories(dataset_id);
         CREATE INDEX IF NOT EXISTS idx_embeddings_asset_id ON embeddings(asset_id);
         ",
-    )])
+        ),
+        M::up(
+            "
+        ALTER TABLE patches ADD COLUMN annotation_id INTEGER REFERENCES annotations(id) ON DELETE SET NULL;
+        CREATE INDEX IF NOT EXISTS idx_patches_annotation_id ON patches(annotation_id);
+        ",
+        ),
+    ])
 }
 
 pub struct Database {
@@ -172,6 +179,7 @@ mod tests {
             "idx_annotations_asset_id",
             "idx_categories_dataset_id",
             "idx_embeddings_asset_id",
+            "idx_patches_annotation_id",
         ] {
             let count: i64 = db
                 .conn
