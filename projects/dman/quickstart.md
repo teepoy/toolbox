@@ -250,7 +250,8 @@ dman-cli add my-project ~/datasets/my-empty-dataset --format builder
 Build with Python support:
 
 ```bash
-cargo build --release --features python
+pip install .
+# or: maturin develop
 ```
 
 ```python
@@ -259,20 +260,20 @@ import dman
 # Create a new dataset using the sample/asset builder pattern
 builder = dman.create_dataset("my-annotated-dataset")
 
-# Add samples and assets
+# Add samples and assets — signature: add_asset(sample_name, asset_type, file_path, ...)
 builder.add_sample("scene_001", metadata={"split": "train"})
-builder.add_asset("scene_001", "/path/to/image_001.jpg", asset_type="image")
+builder.add_asset("scene_001", "image", "/path/to/image_001.jpg")
 
 builder.add_sample("scene_002", metadata={"split": "train"})
-builder.add_asset("scene_002", "/path/to/image_002.jpg", asset_type="image", metadata={"source": "camera_a"})
+builder.add_asset("scene_002", "image", "/path/to/image_002.jpg", metadata={"source": "camera_a"})
 
 # Add annotations (bbox = [x, y, width, height])
 builder.add_annotation("scene_001", "cat", bbox=[100.0, 200.0, 50.0, 80.0], asset_name="image_001.jpg")
 builder.add_annotation("scene_001", "dog", bbox=[300.0, 150.0, 60.0, 90.0], asset_name="image_001.jpg")
 builder.add_annotation("scene_002", "cat", bbox=[50.0, 50.0, 120.0, 100.0], asset_name="image_002.jpg")
 
-# Convenience: add_image() creates a 1:1 sample+asset automatically
-builder.add_image("/path/to/image_003.jpg", label="cat", bbox=[10.0, 10.0, 50.0, 50.0])
+# Convenience: add_image() creates a 1:1 Sample+Asset automatically
+builder.add_image("/path/to/image_003.jpg")
 
 # Define categories with supercategories
 builder.set_category("cat", supercategory="animal")
@@ -317,12 +318,12 @@ import dman
 
 updater = dman.update_dataset("my-annotated-dataset")
 
-# Add a new sample and asset
+# Add a new sample and asset — signature: add_asset(sample_name, asset_type, file_path, ...)
 updater.add_sample("scene_003")
-updater.add_asset("scene_003", "/path/to/new_image.jpg", asset_type="image")
+updater.add_asset("scene_003", "image", "/path/to/new_image.jpg")
 
-# Add annotation to an existing sample
-updater.add_annotation("scene_001", "bird", bbox=[10.0, 20.0, 30.0, 40.0])
+# Add annotation to an existing sample — updater uses sample_id (integer), not name
+updater.add_annotation(1, "bird", bbox=[10.0, 20.0, 30.0, 40.0])
 
 # Apply all changes atomically
 updater.apply()

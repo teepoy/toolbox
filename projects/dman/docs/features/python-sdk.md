@@ -18,8 +18,9 @@ updater = dman.update_dataset("demo")
 
 ```python
 builder = dman.create_dataset("pets")
-image_id = builder.add_image("/tmp/cat.jpg")
-builder.add_annotation(image_id, "cat", [10.0, 20.0, 30.0, 40.0])
+builder.add_sample("scene_001")
+builder.add_asset("scene_001", "image", "/tmp/cat.jpg")
+builder.add_annotation("scene_001", "cat", bbox=[10.0, 20.0, 30.0, 40.0])
 builder.set_category("cat", supercategory="animal")
 dataset = builder.build()
 ```
@@ -36,7 +37,8 @@ print(dataset[0])
 
 ```python
 updater = dman.update_dataset("pets")
-updater.add_image("/tmp/dog.jpg")
+updater.add_sample("scene_002")
+updater.add_asset("scene_002", "image", "/tmp/dog.jpg")
 updater.apply()
 ```
 

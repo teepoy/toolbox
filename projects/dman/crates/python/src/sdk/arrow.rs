@@ -10,8 +10,8 @@ pub(crate) use python_impl::*;
 pub mod python_impl {
     use std::sync::Arc;
 
-    use arrow_array::RecordBatch;
     use arrow_array::builder::{Float64Builder, Int64Builder, LargeListBuilder, StringBuilder};
+    use arrow_array::RecordBatch;
     use arrow_schema::{DataType, Field, Schema};
 
     use super::super::loader::python_impl::{AnnotationRow, AssetRow, SampleRow};
@@ -56,6 +56,9 @@ pub mod python_impl {
             Field::new("dataset_id", DataType::Int64, false),
             Field::new("name", DataType::Utf8, false),
             Field::new("metadata", DataType::Utf8, true),
+            // created_at is intentionally Utf8, not Timestamp. SQLite stores
+            // timestamps as TEXT (ISO-8601 strings) and the alpha-stage Arrow
+            // export preserves that representation to avoid lossy parsing.
             Field::new("created_at", DataType::Utf8, true),
         ]));
 
@@ -345,8 +348,8 @@ pub mod python_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use arrow_array::Array;
         use arrow_array::cast::AsArray;
+        use arrow_array::Array;
         use arrow_schema::DataType;
 
         // ── helpers ──────────────────────────────────────────────────────

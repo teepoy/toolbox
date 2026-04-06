@@ -180,11 +180,12 @@ dman-cli add my-project ~/datasets/my-empty-dataset --format builder
 import dman
 
 builder = dman.create_dataset("my-annotated-dataset")
-idx0 = builder.add_image("/path/to/image_001.jpg")
-builder.add_annotation(idx0, "cat", [100.0, 200.0, 50.0, 80.0])
+builder.add_sample("scene_001")
+builder.add_asset("scene_001", "image", "/path/to/image_001.jpg")
+builder.add_annotation("scene_001", "cat", bbox=[100.0, 200.0, 50.0, 80.0])
 builder.set_category("cat", supercategory="animal")
 ds = builder.build()
-print(f"Created '{ds.name}' with {len(ds)} images")
+print(f"Created '{ds.name}' with {len(ds)} samples")
 ```
 
 ---

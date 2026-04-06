@@ -33,7 +33,7 @@ builder.add_asset("scene_001", "image", "/tmp/cat.jpg")
 builder.add_annotation("scene_001", "cat", bbox=[10.0, 20.0, 30.0, 40.0], asset_name="cat.jpg")
 
 # Convenience: add_image() creates a 1:1 Sample+Asset automatically
-builder.add_image("/tmp/dog.jpg", label="dog", bbox=[5.0, 5.0, 50.0, 60.0])
+builder.add_image("/tmp/dog.jpg")
 
 builder.set_category("cat", supercategory="animal")
 builder.set_category("dog", supercategory="animal")
@@ -69,7 +69,7 @@ updater.add_sample("scene_002")
 updater.add_asset("scene_002", "image", "/tmp/new_cat.jpg")
 
 # Add an annotation to an existing sample
-updater.add_annotation("scene_001", "bird", bbox=[10.0, 20.0, 30.0, 40.0])
+updater.add_annotation(1, "bird", bbox=[10.0, 20.0, 30.0, 40.0])  # sample_id, not name
 
 # Apply all changes atomically
 updater.apply()
