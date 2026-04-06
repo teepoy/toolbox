@@ -7,10 +7,13 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-python = ["dep:pyo3"]
+python = ["dep:pyo3", "dep:pyo3-arrow"]
 
 [dependencies]
 pyo3 = { version = "0.28", features = ["auto-initialize"], optional = true }
+pyo3-arrow = { version = "0.17", optional = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
 dman-core = { path = "../core" }
 walkdir = { workspace = true }
 serde = { workspace = true }

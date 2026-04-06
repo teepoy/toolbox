@@ -9,7 +9,7 @@
 pub use python_impl::{DmanDataset, load_dataset};
 
 #[cfg(feature = "python")]
-mod python_impl {
+pub mod python_impl {
     use dman_core::{catalog::Catalog, dataset::DatasetService, db::Database, error::DmanError};
     use pyo3::prelude::*;
     use pyo3::types::{PyDict, PyList};
@@ -22,6 +22,7 @@ mod python_impl {
         pub dataset_id: i64,
         pub name: String,
         pub metadata: Option<String>,
+        pub created_at: Option<String>,
     }
 
     #[derive(Debug, Clone)]
@@ -33,6 +34,7 @@ mod python_impl {
         pub file_path: String,
         pub width: Option<i64>,
         pub height: Option<i64>,
+        pub hash: Option<String>,
         pub metadata: Option<String>,
     }
 
@@ -66,7 +68,7 @@ mod python_impl {
             let mut stmt = db
                 .conn
                 .prepare(
-                    "SELECT id, dataset_id, name, metadata \
+                    "SELECT id, dataset_id, name, metadata, created_at \
                      FROM samples WHERE dataset_id = ?1 ORDER BY id",
                 )
                 .map_err(|e| {
@@ -80,6 +82,7 @@ mod python_impl {
                         dataset_id: row.get(1)?,
                         name: row.get(2)?,
                         metadata: row.get(3)?,
+                        created_at: row.get(4)?,
                     })
                 })
                 .map_err(|e| {
@@ -99,7 +102,7 @@ mod python_impl {
                 .conn
                 .prepare(
                     "SELECT a.id, a.sample_id, a.asset_type, a.file_name, a.file_path, \
-                            a.width, a.height, a.metadata \
+                            a.width, a.height, a.hash, a.metadata \
                      FROM assets a \
                      JOIN samples s ON s.id = a.sample_id \
                      WHERE s.dataset_id = ?1 ORDER BY a.id",
@@ -118,7 +121,8 @@ mod python_impl {
                         file_path: row.get(4)?,
                         width: row.get(5)?,
                         height: row.get(6)?,
-                        metadata: row.get(7)?,
+                        hash: row.get(7)?,
+                        metadata: row.get(8)?,
                     })
                 })
                 .map_err(|e| {
@@ -295,6 +299,81 @@ mod python_impl {
                 .filter(|a| a.asset_type == "image")
                 .map(|a| a.file_path.clone())
                 .collect()
+        }
+
+        fn load_annotations_for_dataset(
+            db: &Database,
+            dataset_id: i64,
+        ) -> PyResult<Vec<AnnotationRow>> {
+            let mut stmt = db
+                .conn
+                .prepare(
+                    "SELECT ann.id, ann.sample_id, ann.asset_id, ann.category_id, \
+                            ann.bbox, ann.segmentation, ann.keypoints, ann.metadata \
+                     FROM annotations ann \
+                     JOIN samples s ON s.id = ann.sample_id \
+                     WHERE s.dataset_id = ?1 ORDER BY ann.id",
+                )
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB prepare error: {e}"))
+                })?;
+
+            let rows = stmt
+                .query_map(rusqlite::params![dataset_id], |row| {
+                    Ok(AnnotationRow {
+                        id: row.get(0)?,
+                        sample_id: row.get(1)?,
+                        asset_id: row.get(2)?,
+                        category_id: row.get(3)?,
+                        bbox: row.get(4)?,
+                        segmentation: row.get(5)?,
+                        keypoints: row.get(6)?,
+                        metadata: row.get(7)?,
+                    })
+                })
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB query error: {e}"))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB row error: {e}"))
+                })?;
+
+            Ok(rows)
+        }
+
+        fn load_categories(
+            db: &Database,
+            dataset_id: i64,
+        ) -> PyResult<Vec<crate::sdk::arrow::CategoryRow>> {
+            let mut stmt = db
+                .conn
+                .prepare(
+                    "SELECT id, dataset_id, name, supercategory \
+                     FROM categories WHERE dataset_id = ?1 ORDER BY id",
+                )
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB prepare error: {e}"))
+                })?;
+
+            let rows = stmt
+                .query_map(rusqlite::params![dataset_id], |row| {
+                    Ok(crate::sdk::arrow::CategoryRow {
+                        id: row.get(0)?,
+                        dataset_id: row.get(1)?,
+                        name: row.get(2)?,
+                        supercategory: row.get(3)?,
+                    })
+                })
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB query error: {e}"))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("DB row error: {e}"))
+                })?;
+
+            Ok(rows)
         }
 
         /// Build an asset PyDict from an AssetRow.
@@ -647,6 +726,101 @@ mod python_impl {
         /// Number of assets in the dataset.
         fn asset_count(&self) -> usize {
             self.asset_rows.len()
+        }
+
+        // ─── Arrow RecordBatch methods ──────────────────────────────────────
+
+        fn samples_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            let batch =
+                crate::sdk::arrow::samples_to_record_batch(&self.sample_rows).map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+                })?;
+            let pyarrow = pyo3_arrow::PyRecordBatch::new(batch)
+                .into_pyarrow(py)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow export error: {e}"))
+                })?;
+            Ok(pyarrow.unbind().into_any())
+        }
+
+        fn assets_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            let batch =
+                crate::sdk::arrow::assets_to_record_batch(&self.asset_rows).map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+                })?;
+            let pyarrow = pyo3_arrow::PyRecordBatch::new(batch)
+                .into_pyarrow(py)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow export error: {e}"))
+                })?;
+            Ok(pyarrow.unbind().into_any())
+        }
+
+        fn annotations_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            let db = Self::open_catalog_db()?;
+            let rows = Self::load_annotations_for_dataset(&db, self.dataset_id)?;
+            let batch = crate::sdk::arrow::annotations_to_record_batch(&rows).map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+            })?;
+            let pyarrow = pyo3_arrow::PyRecordBatch::new(batch)
+                .into_pyarrow(py)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow export error: {e}"))
+                })?;
+            Ok(pyarrow.unbind().into_any())
+        }
+
+        fn categories_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            let db = Self::open_catalog_db()?;
+            let rows = Self::load_categories(&db, self.dataset_id)?;
+            let batch = crate::sdk::arrow::categories_to_record_batch(&rows).map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+            })?;
+            let pyarrow = pyo3_arrow::PyRecordBatch::new(batch)
+                .into_pyarrow(py)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow export error: {e}"))
+                })?;
+            Ok(pyarrow.unbind().into_any())
+        }
+
+        fn to_arrow(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            let samples = self.samples_arrow(py)?;
+            let assets = self.assets_arrow(py)?;
+            let db = Self::open_catalog_db()?;
+
+            let ann_rows = Self::load_annotations_for_dataset(&db, self.dataset_id)?;
+            let ann_batch =
+                crate::sdk::arrow::annotations_to_record_batch(&ann_rows).map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+                })?;
+            let annotations = pyo3_arrow::PyRecordBatch::new(ann_batch)
+                .into_pyarrow(py)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow export error: {e}"))
+                })?;
+
+            let cat_rows = Self::load_categories(&db, self.dataset_id)?;
+            let cat_batch =
+                crate::sdk::arrow::categories_to_record_batch(&cat_rows).map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow build error: {e}"))
+                })?;
+            let categories = pyo3_arrow::PyRecordBatch::new(cat_batch)
+                .into_pyarrow(py)
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Arrow export error: {e}"))
+                })?;
+
+            let d = PyDict::new(py);
+            d.set_item("samples", samples)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            d.set_item("assets", assets)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            d.set_item("annotations", annotations)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            d.set_item("categories", categories)
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            Ok(d.unbind().into_any())
         }
     }
 
