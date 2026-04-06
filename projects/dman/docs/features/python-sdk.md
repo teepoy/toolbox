@@ -5,11 +5,11 @@ The Python SDK is for workflows where CLI commands are too rigid and you want di
 ## Main entry points
 
 ```python
-import dman_python
+import dman
 
-builder = dman_python.create_dataset("demo")
-dataset = dman_python.load_dataset("demo")
-updater = dman_python.update_dataset("demo")
+builder = dman.create_dataset("demo")
+dataset = dman.load_dataset("demo")
+updater = dman.update_dataset("demo")
 ```
 
 ## Common workflows
@@ -17,7 +17,7 @@ updater = dman_python.update_dataset("demo")
 ### Create a dataset
 
 ```python
-builder = dman_python.create_dataset("pets")
+builder = dman.create_dataset("pets")
 image_id = builder.add_image("/tmp/cat.jpg")
 builder.add_annotation(image_id, "cat", [10.0, 20.0, 30.0, 40.0])
 builder.set_category("cat", supercategory="animal")
@@ -27,7 +27,7 @@ dataset = builder.build()
 ### Load a dataset
 
 ```python
-dataset = dman_python.load_dataset("pets")
+dataset = dman.load_dataset("pets")
 print(len(dataset))
 print(dataset[0])
 ```
@@ -35,7 +35,7 @@ print(dataset[0])
 ### Update a dataset
 
 ```python
-updater = dman_python.update_dataset("pets")
+updater = dman.update_dataset("pets")
 updater.add_image("/tmp/dog.jpg")
 updater.apply()
 ```

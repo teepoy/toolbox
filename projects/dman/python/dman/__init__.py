@@ -14,8 +14,19 @@ try:
         load_dataset,
         update_dataset,
     )
-except ImportError:
-    pass
+except ImportError as _e:
+    import warnings as _warnings
+
+    _warnings.warn(
+        f"Failed to import dman native module: {_e}. "
+        "SDK classes (DmanDataset, create_dataset, load_dataset, update_dataset) "
+        "will not be available. Rebuild with: pip install -e . or maturin develop",
+        ImportWarning,
+        stacklevel=2,
+    )
+    # Re-raise so callers get a clear error immediately rather than
+    # a confusing AttributeError later.
+    raise
 
 
 def _candidate_binaries() -> list[Path]:

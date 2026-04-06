@@ -254,10 +254,10 @@ cargo build --release --features python
 ```
 
 ```python
-import dman_python
+import dman
 
 # Create a new dataset using the sample/asset builder pattern
-builder = dman_python.create_dataset("my-annotated-dataset")
+builder = dman.create_dataset("my-annotated-dataset")
 
 # Add samples and assets
 builder.add_sample("scene_001", metadata={"split": "train"})
@@ -286,9 +286,9 @@ print(f"Created '{ds.name}'")
 ### Load and iterate
 
 ```python
-import dman_python
+import dman
 
-ds = dman_python.load_dataset("my-annotated-dataset")
+ds = dman.load_dataset("my-annotated-dataset")
 print(f"Dataset: {ds.name}")
 
 # Iterate samples
@@ -313,9 +313,9 @@ hf_ds = ds.to_hf_dataset()  # requires: pip install datasets
 ### Update an existing dataset
 
 ```python
-import dman_python
+import dman
 
-updater = dman_python.update_dataset("my-annotated-dataset")
+updater = dman.update_dataset("my-annotated-dataset")
 
 # Add a new sample and asset
 updater.add_sample("scene_003")

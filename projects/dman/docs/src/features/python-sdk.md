@@ -5,11 +5,11 @@ The Python SDK is for workflows where CLI commands are too rigid and you want di
 ## Main entry points
 
 ```python
-import dman_python
+import dman
 
-builder = dman_python.create_dataset("demo")
-dataset = dman_python.load_dataset("demo")
-updater = dman_python.update_dataset("demo")
+builder = dman.create_dataset("demo")
+dataset = dman.load_dataset("demo")
+updater = dman.update_dataset("demo")
 ```
 
 ## Data model
@@ -25,7 +25,7 @@ The SDK operates on the `Dataset → Sample → Asset → Annotation` hierarchy:
 ### Create a dataset
 
 ```python
-builder = dman_python.create_dataset("pets")
+builder = dman.create_dataset("pets")
 
 # Add a sample and its asset explicitly
 builder.add_sample("scene_001", metadata={"split": "train"})
@@ -43,7 +43,7 @@ dataset = builder.build()
 ### Load a dataset
 
 ```python
-dataset = dman_python.load_dataset("pets")
+dataset = dman.load_dataset("pets")
 
 # Iterate all samples
 for sample in dataset.samples():
@@ -62,7 +62,7 @@ print(len(annotations))
 ### Update a dataset
 
 ```python
-updater = dman_python.update_dataset("pets")
+updater = dman.update_dataset("pets")
 
 # Add a new sample with an asset
 updater.add_sample("scene_002")

@@ -43,6 +43,29 @@ impl PatchService {
                 other => DmanError::Database(other),
             })?;
 
+        // Validate that annotation_id, if provided, belongs to this asset.
+        if let Some(ann_id) = annotation_id {
+            let ann_asset_id: Option<i64> = db
+                .conn
+                .query_row(
+                    "SELECT asset_id FROM annotations WHERE id = ?1",
+                    rusqlite::params![ann_id],
+                    |row| row.get(0),
+                )
+                .map_err(|e| match e {
+                    rusqlite::Error::QueryReturnedNoRows => {
+                        DmanError::InvalidInput(format!("annotation_id {} does not exist", ann_id))
+                    }
+                    other => DmanError::Database(other),
+                })?;
+            if ann_asset_id != Some(asset_id) {
+                return Err(DmanError::InvalidInput(format!(
+                    "annotation {} does not belong to asset {} (belongs to asset {:?})",
+                    ann_id, asset_id, ann_asset_id
+                )));
+            }
+        }
+
         let img = image::open(&asset_file_path)
             .map_err(|e| DmanError::StorageError(format!("failed to open image: {}", e)))?;
 
@@ -571,5 +594,97 @@ mod tests {
         let patches = PatchService::get_by_asset(&db, asset_id).unwrap();
         assert_eq!(patches.len(), 1);
         assert_eq!(patches[0].annotation_id, None);
+    }
+
+    #[test]
+    fn extract_rejects_annotation_from_different_asset() {
+        let tmp = tempdir().unwrap();
+        let db = Database::open_in_memory().expect("db");
+        let storage = StorageManager::new(tmp.path().to_path_buf());
+
+        let (dataset_id, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
+
+        // Create a second sample+asset
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, ?2)",
+                rusqlite::params![dataset_id, "sample-002"],
+            )
+            .unwrap();
+        let sample2_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+        let img2 = tmp.path().join("test_img2.jpg");
+        let img = image::RgbImage::from_pixel(4, 4, image::Rgb([64u8, 128, 200]));
+        image::DynamicImage::ImageRgb8(img)
+            .save(&img2)
+            .expect("save test image 2");
+        let path_str2 = img2.to_str().unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', ?2, ?3)",
+                rusqlite::params![sample2_id, "test_img2.jpg", path_str2],
+            )
+            .unwrap();
+        let other_asset_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+
+        // Create annotation on the OTHER asset
+        db.conn
+            .execute(
+                "INSERT INTO annotations (sample_id, asset_id, bbox) VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    sample2_id,
+                    other_asset_id,
+                    r#"{"x":0,"y":0,"width":4,"height":4}"#
+                ],
+            )
+            .unwrap();
+        let wrong_annotation_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+
+        // Attempt to extract a patch on asset_id but referencing an annotation from other_asset_id
+        let result = PatchService::extract(
+            &db,
+            &storage,
+            asset_id,
+            &full_bbox(),
+            &tmp.path().join("out"),
+            Some(wrong_annotation_id),
+        );
+        assert!(result.is_err(), "should reject cross-asset annotation_id");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("does not belong to asset"),
+            "error should mention ownership mismatch, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn extract_rejects_nonexistent_annotation_id() {
+        let tmp = tempdir().unwrap();
+        let db = Database::open_in_memory().expect("db");
+        let storage = StorageManager::new(tmp.path().to_path_buf());
+
+        let (_, asset_id) = insert_asset(&db, &make_test_image(tmp.path()));
+        let result = PatchService::extract(
+            &db,
+            &storage,
+            asset_id,
+            &full_bbox(),
+            &tmp.path().join("out"),
+            Some(99999),
+        );
+        assert!(result.is_err(), "should reject nonexistent annotation_id");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("does not exist"),
+            "error should mention nonexistence, got: {err_msg}"
+        );
     }
 }

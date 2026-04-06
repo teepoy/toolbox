@@ -10,8 +10,8 @@ pub(crate) use python_impl::*;
 pub mod python_impl {
     use std::sync::Arc;
 
-    use arrow_array::builder::{Float64Builder, Int64Builder, LargeListBuilder, StringBuilder};
     use arrow_array::RecordBatch;
+    use arrow_array::builder::{Float64Builder, Int64Builder, LargeListBuilder, StringBuilder};
     use arrow_schema::{DataType, Field, Schema};
 
     use super::super::loader::python_impl::{AnnotationRow, AssetRow, SampleRow};
@@ -142,6 +142,11 @@ pub mod python_impl {
     // ─── annotations ────────────────────────────────────────────────────────
 
     /// Parse a JSON bbox string `{"x":..,"y":..,"width":..,"height":..}` into (x, y, w, h).
+    ///
+    /// Returns `None` for malformed or incomplete JSON — the caller maps this to Arrow null.
+    /// This is intentional: annotation data imported from external formats may contain
+    /// invalid entries, and surfacing them as nulls lets downstream queries filter them
+    /// rather than failing the entire batch.
     fn parse_bbox(json: &str) -> Option<(f64, f64, f64, f64)> {
         let v: serde_json::Value = serde_json::from_str(json).ok()?;
         let obj = v.as_object()?;
@@ -340,8 +345,8 @@ pub mod python_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use arrow_array::cast::AsArray;
         use arrow_array::Array;
+        use arrow_array::cast::AsArray;
         use arrow_schema::DataType;
 
         // ── helpers ──────────────────────────────────────────────────────

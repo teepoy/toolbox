@@ -53,6 +53,11 @@ pub mod python_impl {
     // ─── DmanDataset ────────────────────────────────────────────────────────
 
     /// A Python-accessible dataset backed by a dman catalog.
+    ///
+    /// This is an eagerly-loaded snapshot: all samples, assets, annotations, and
+    /// categories are read from SQLite at construction time. The struct does not
+    /// reflect later DB mutations. This is acceptable at the current alpha stage
+    /// and avoids holding a long-lived DB connection across Python calls.
     #[derive(Debug)]
     #[pyclass(name = "DmanDataset")]
     pub struct DmanDataset {

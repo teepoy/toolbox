@@ -288,4 +288,142 @@ mod tests {
             .expect("should query journal mode");
         assert!(!mode.is_empty());
     }
+
+    #[test]
+    fn patches_annotation_id_column_exists() {
+        let db = Database::open_in_memory().expect("db");
+        db.conn
+            .execute(
+                "INSERT INTO datasets (name, path) VALUES ('ds', '/tmp/ds')",
+                [],
+            )
+            .expect("insert dataset");
+        let ds_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 's1')",
+                rusqlite::params![ds_id],
+            )
+            .unwrap();
+        let sample_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', 'f.jpg', '/tmp/f.jpg')",
+                rusqlite::params![sample_id],
+            )
+            .unwrap();
+        let asset_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+
+        db.conn
+            .execute(
+                "INSERT INTO patches (asset_id, bbox, annotation_id) VALUES (?1, '{}', NULL)",
+                rusqlite::params![asset_id],
+            )
+            .expect("annotation_id column should accept NULL");
+
+        let ann_id_val: Option<i64> = db
+            .conn
+            .query_row(
+                "SELECT annotation_id FROM patches WHERE asset_id = ?1",
+                rusqlite::params![asset_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ann_id_val, None);
+    }
+
+    #[test]
+    fn patches_annotation_id_on_delete_set_null() {
+        let db = Database::open_in_memory().expect("db");
+        db.conn
+            .execute(
+                "INSERT INTO datasets (name, path) VALUES ('ds', '/tmp/ds')",
+                [],
+            )
+            .unwrap();
+        let ds_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO samples (dataset_id, name) VALUES (?1, 's1')",
+                rusqlite::params![ds_id],
+            )
+            .unwrap();
+        let sample_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO assets (sample_id, asset_type, file_name, file_path) VALUES (?1, 'image', 'f.jpg', '/tmp/f.jpg')",
+                rusqlite::params![sample_id],
+            )
+            .unwrap();
+        let asset_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO annotations (sample_id, asset_id, bbox) VALUES (?1, ?2, '{}')",
+                rusqlite::params![sample_id, asset_id],
+            )
+            .unwrap();
+        let ann_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+
+        db.conn
+            .execute(
+                "INSERT INTO patches (asset_id, bbox, annotation_id) VALUES (?1, '{}', ?2)",
+                rusqlite::params![asset_id, ann_id],
+            )
+            .unwrap();
+        let patch_id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
+
+        let before: Option<i64> = db
+            .conn
+            .query_row(
+                "SELECT annotation_id FROM patches WHERE id = ?1",
+                rusqlite::params![patch_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(before, Some(ann_id));
+
+        db.conn
+            .execute(
+                "DELETE FROM annotations WHERE id = ?1",
+                rusqlite::params![ann_id],
+            )
+            .unwrap();
+
+        let after: Option<i64> = db
+            .conn
+            .query_row(
+                "SELECT annotation_id FROM patches WHERE id = ?1",
+                rusqlite::params![patch_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            after, None,
+            "annotation_id should be set to NULL after annotation deletion"
+        );
+    }
 }

@@ -177,9 +177,9 @@ dman-cli add my-project ~/datasets/my-empty-dataset --format builder
 ```
 
 ```python
-import dman_python
+import dman
 
-builder = dman_python.create_dataset("my-annotated-dataset")
+builder = dman.create_dataset("my-annotated-dataset")
 idx0 = builder.add_image("/path/to/image_001.jpg")
 builder.add_annotation(idx0, "cat", [100.0, 200.0, 50.0, 80.0])
 builder.set_category("cat", supercategory="animal")
