@@ -173,6 +173,27 @@ impl PatchService {
         rows.into_iter().map(row_to_patch).collect()
     }
 
+    pub fn get_by_annotation(db: &Database, annotation_id: i64) -> Result<Vec<Patch>> {
+        let mut stmt = db.conn.prepare(
+            "SELECT id, asset_id, annotation_id, bbox, file_path, metadata FROM patches WHERE annotation_id = ?1",
+        )?;
+
+        let rows = stmt
+            .query_map(rusqlite::params![annotation_id], |row| {
+                Ok(PatchRow {
+                    id: row.get(0)?,
+                    asset_id: row.get(1)?,
+                    annotation_id: row.get(2)?,
+                    bbox_json: row.get(3)?,
+                    file_path: row.get::<_, Option<String>>(4)?,
+                    metadata_json: row.get::<_, Option<String>>(5)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        rows.into_iter().map(row_to_patch).collect()
+    }
+
     pub fn get_by_dataset(db: &Database, dataset_id: i64) -> Result<Vec<Patch>> {
         let mut stmt = db.conn.prepare(
             "SELECT p.id, p.asset_id, p.annotation_id, p.bbox, p.file_path, p.metadata
@@ -570,6 +591,10 @@ mod tests {
         let patches = PatchService::get_by_dataset(&db, dataset_id).unwrap();
         assert_eq!(patches.len(), 1);
         assert_eq!(patches[0].annotation_id, Some(annotation_id));
+
+        let patches = PatchService::get_by_annotation(&db, annotation_id).unwrap();
+        assert_eq!(patches.len(), 1);
+        assert_eq!(patches[0].annotation_id, Some(annotation_id));
     }
 
     #[test]
@@ -594,6 +619,9 @@ mod tests {
         let patches = PatchService::get_by_asset(&db, asset_id).unwrap();
         assert_eq!(patches.len(), 1);
         assert_eq!(patches[0].annotation_id, None);
+
+        let patches = PatchService::get_by_annotation(&db, 9999).unwrap();
+        assert!(patches.is_empty());
     }
 
     #[test]
