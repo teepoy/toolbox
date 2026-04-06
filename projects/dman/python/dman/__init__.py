@@ -5,6 +5,18 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from dman.dman import (
+        DmanDataset,
+        DmanDatasetBuilder,
+        DmanDatasetUpdater,
+        create_dataset,
+        load_dataset,
+        update_dataset,
+    )
+except ImportError:
+    pass
+
 
 def _candidate_binaries() -> list[Path]:
     package_root = Path(__file__).resolve().parent

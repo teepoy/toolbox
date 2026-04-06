@@ -89,7 +89,7 @@ fn extract_str_field(content: &str, field: &str) -> Option<String> {
 use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
-#[pymodule]
+#[pymodule(name = "dman")]
 fn dman_python(m: &Bound<'_, pyo3::types::PyModule>) -> PyResult<()> {
     use sdk::builder::python_impl::{
         DmanDatasetBuilder, DmanDatasetUpdater, create_dataset, update_dataset,
