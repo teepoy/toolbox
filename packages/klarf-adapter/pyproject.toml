@@ -1,0 +1,24 @@
+[project]
+name = "klarf-adapter"
+version = "0.1.0"
+description = "Read and generate KLARF wafer defect files"
+readme = "README.md"
+authors = [
+    { name = "Emia", email = "47446852+YuShigurey@users.noreply.github.com" },
+]
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.13.1", "pyyaml>=6.0.3"]
+
+[project.scripts]
+klarf-adapter = "klarf_adapter.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.4.2", "types-pyyaml>=6.0.12.20250915"]
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = ["src"]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
