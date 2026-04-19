@@ -1,0 +1,44 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running unittests src/lib.rs (target/debug/deps/dman_core-d8ec50f408a17fc3)
+
+running 20 tests
+test ops::tests::rename_not_found ... ok
+test ops::tests::split_invalid_ratios ... ok
+test ops::tests::duplicate_target_exists ... ok
+test ops::tests::duplicate_not_found ... ok
+test ops::tests::rename_basic ... ok
+test ops::tests::merge_output_already_exists ... ok
+test ops::tests::merge_two ... ok
+test ops::tests::rename_target_already_exists ... ok
+test ops::transforms::tests::filter_category_keeps_matching_only ... ok
+test virtual_dataset::transforms::tests::test_chain_of_ops_schema ... ok
+test ops::tests::duplicate_basic ... ok
+test ops::transforms::tests::sample_invalid_ratio_returns_error ... ok
+test ops::transforms::tests::relabel_renames_categories ... ok
+test ops::transforms::tests::filter_has_annotations_keeps_annotated_only ... ok
+test ops::transforms::tests::filter_metadata_eq_matches_key_value ... ok
+test ops::transforms::tests::sample_ratio_deterministic ... ok
+test ops::transforms::tests::sample_ratio_produces_expected_count ... ok
+test ops::tests::split_two_way ... ok
+test ops::tests::split_three_way ... ok
+test ops::transforms::tests::resize_returns_error_when_no_tool_available ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.11s
+
+     Running tests/fixtures_test.rs (target/debug/deps/fixtures_test-cb43d9eeec16f943)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/roundtrip/mod.rs (target/debug/deps/roundtrip-0197e931fc966df5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+     Running tests/virtual_integration.rs (target/debug/deps/virtual_integration-7bdacc91171cb36e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s

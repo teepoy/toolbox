@@ -1,0 +1,7 @@
+$ cargo clippy --workspace --all-targets --all-features -- -D warnings
+    Checking dman-core v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/core)
+    Checking dman-server v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/server)
+    Checking dman-python v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/python)
+    Checking dman-cli v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.34s
+Exit code: 0

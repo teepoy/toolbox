@@ -1,0 +1,23 @@
+
+=== [2026-04-05] Final verification run ===
+cargo test -p dman-python --features python
+
+running 37 tests
+test sdk::builder::tests::builder_rollback_on_duplicate_name ... ok
+test sdk::builder::tests::add_sample_and_asset_separate_methods ... ok
+test sdk::builder::tests::builder_empty_dataset_works ... ok
+test sdk::builder::tests::builder_registers_explicit_category ... ok
+test sdk::builder::tests::builder_creates_dataset_and_inserts_samples ... ok
+test sdk::builder::tests::builder_multiple_samples_and_annotations ... ok
+test sdk::builder::tests::updater_add_sample_internal_returns_positive_id ... ok
+test sdk::builder::tests::builder_bbox_uses_width_height_keys ... ok
+test sdk::builder::tests::updater_new_with_db_errors_for_missing_dataset ... ok
+test sdk::builder::tests::updater_apply_adds_annotation_with_category ... ok
+test sdk::builder::tests::updater_apply_removes_sample_and_adds_new ... ok
+test embeddings::tests::embeddings_compute_embeddings_processes_all_images ... ok
+(+ 25 more tests all passing)
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+Also fixed: crates/python/src/embeddings.rs — migrated from images table to assets table
+(both production query and test fixture)

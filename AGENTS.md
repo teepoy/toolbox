@@ -134,3 +134,24 @@ Usage notes:
 <!-- SKILLS_TABLE_END -->
 
 </skills_system>
+
+## Shell Command Rules
+
+### Always Use Timeouts for Network Requests
+
+When running `curl`, `wget`, or any HTTP request from the shell (e.g., health checks, API probes), **always set a timeout** to prevent the command from hanging indefinitely.
+
+```bash
+# CORRECT — with timeout
+curl --max-time 5 http://localhost:8080/health
+curl -m 5 http://localhost:8080/api/status
+wget --timeout=5 http://localhost:8080/health
+
+# WRONG — no timeout, will hang forever if server is unresponsive
+curl http://localhost:8080/health
+```
+
+- Use `--max-time` (or `-m`) for curl (covers both connection and transfer).
+- Use `--connect-timeout` when you only want to limit the TCP connect phase.
+- Default recommendation: **5 seconds** for local health checks, **10 seconds** for remote APIs.
+- This applies to all inspection/verification tasks — never leave a network call unbounded.

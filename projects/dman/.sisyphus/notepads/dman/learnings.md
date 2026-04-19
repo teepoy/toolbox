@@ -198,6 +198,12 @@ let paths: Vec<String> = stmt
 
 ### Files Changed
 - `crates/core/src/embeddings/mod.rs` — new (302 lines, 8 tests)
+
+## Python Typed SDK Layer
+
+- Python SDK record wrappers should treat Rust-provided empty JSON strings (`""`) as absent and coerce them to `None` instead of raising.
+- `Sample._from_dict()` can safely build typed nested `assets` with `Asset._from_dict()` so callers never need raw dict subscripting.
+- A small module docstring is useful here because the file is a public-facing compatibility layer, not an internal helper.
 - `crates/core/src/lib.rs` — added `pub mod embeddings;`
 
 ### Test Results

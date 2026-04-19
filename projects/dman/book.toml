@@ -1,0 +1,14 @@
+[book]
+title = "dman"
+authors = ["dman contributors"]
+language = "en"
+src = "docs/src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/example/dman"
+site-url = "/dman/"

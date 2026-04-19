@@ -1,0 +1,28 @@
+   Compiling dman-core v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.94s
+     Running unittests src/lib.rs (target/debug/deps/dman_core-d8ec50f408a17fc3)
+
+running 7 tests
+test db::tests::wal_pragmas_execute ... ok
+test db::tests::creates_expected_indices ... ok
+test db::tests::open_in_memory_works ... ok
+test patches::tests::extract_db_record ... FAILED
+test db::tests::creates_expected_tables ... ok
+test db::tests::can_insert_and_read_dataset ... ok
+test catalog::tests::init_creates_catalog_db_and_subdirs ... ok
+
+failures:
+
+---- patches::tests::extract_db_record stdout ----
+
+thread 'patches::tests::extract_db_record' (1465358) panicked at crates/core/src/patches/mod.rs:254:14:
+insert image: SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: images"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    patches::tests::extract_db_record
+
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 185 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p dman-core --lib`

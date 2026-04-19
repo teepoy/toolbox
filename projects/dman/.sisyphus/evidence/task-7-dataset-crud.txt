@@ -1,0 +1,86 @@
+
+running 66 tests
+test dataset::tests::dataset_inspect_not_found ... ok
+test dataset::tests::dataset_get_by_id_existing ... ok
+test dataset::tests::dataset_get_existing ... ok
+test dataset::tests::add_sample_and_asset_and_retrieve ... ok
+test dataset::tests::dataset_list_returns_all ... ok
+test dataset::tests::annotations_for_sample_and_asset ... ok
+test dataset::tests::add_sample_with_single_asset_convenience ... ok
+test dataset::tests::dataset_get_by_id_not_found ... ok
+test dataset::tests::dataset_inspect_counts ... ok
+test dataset::tests::dataset_list_empty ... ok
+test dataset::tests::dataset_get_not_found ... ok
+test dataset::tests::dataset_full_crud_cycle ... ok
+test dataset::tests::dataset_register_rejects_duplicate ... ok
+test dataset::tests::dataset_remove_not_found ... ok
+test error::tests::test_display_dataset_not_found ... ok
+test dataset::tests::dataset_register_creates_record ... ok
+test dataset::tests::dataset_update_metadata_not_found ... ok
+test storage::tests::test_delete_dataset_storage ... ok
+test storage::tests::test_delete_dataset_storage_nonexistent_is_ok ... ok
+test types::tests::test_dataset_format_normalizes_aliases ... ok
+test dataset::tests::dataset_update_metadata ... ok
+test types::tests::test_dataset_format_serde ... ok
+test types::tests::test_virtual_dataset_chain ... ok
+test dataset::tests::dataset_remove_existing ... ok
+test dataset::tests::dataset_register_rejects_nonexistent_path ... ok
+test dataset::tests::remove_sample_not_found ... ok
+test dataset::tests::remove_sample_cascades ... ok
+test db::tests::can_insert_and_read_dataset ... ok
+test dataset::tests::dataset_remove_cascade_deletes_samples_and_annotations ... ok
+test embeddings::tests::test_embeddings_list_by_dataset ... ok
+test patches::tests::get_by_dataset_returns_patches ... ok
+test embeddings::tests::test_embeddings_list_by_dataset_empty ... ok
+test virtual_dataset::materialize::tests::test_materialize_schema_transform ... ok
+test virtual_dataset::materialize::tests::test_materialize_filter ... ok
+test virtual_dataset::materialize::tests::test_materialize_simple ... ok
+test virtual_dataset::tests::test_create_and_get ... ok
+test predictions::tests::test_get_by_dataset ... ok
+test virtual_dataset::tests::test_definition_serde_roundtrip ... ok
+test virtual_dataset::tests::test_circular_ref_detection ... ok
+test virtual_dataset::materialize::tests::test_rollback_on_failure ... ok
+test virtual_dataset::transforms::tests::test_add_column_samples_with_null_default_does_not_insert ... ok
+test virtual_dataset::transforms::tests::test_add_column_samples_with_non_null_default ... ok
+test virtual_dataset::transforms::tests::test_add_column_schema ... ok
+test virtual_dataset::transforms::tests::test_cast_column_samples_no_change ... ok
+test virtual_dataset::transforms::tests::test_add_duplicate_column_returns_error ... ok
+test virtual_dataset::transforms::tests::test_cast_column_schema ... ok
+test virtual_dataset::tests::test_delete ... ok
+test virtual_dataset::transforms::tests::test_chain_of_ops_schema ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_cast_returns_error ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_remove_returns_error ... ok
+test virtual_dataset::transforms::tests::test_remove_column_samples ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_rename_returns_error ... ok
+test virtual_dataset::transforms::tests::test_remove_column_schema ... ok
+test virtual_dataset::transforms::tests::test_rename_column_samples ... ok
+test virtual_dataset::transforms::tests::test_samples_without_metadata_add_column_with_default ... ok
+test virtual_dataset::transforms::tests::test_rename_column_schema ... ok
+test virtual_dataset::transforms::tests::test_schema_not_mutated_by_apply ... ok
+test virtual_dataset::tests::test_delete_not_found ... ok
+test virtual_dataset::tests::test_evaluate_filter_category ... ok
+test virtual_dataset::tests::test_evaluate_merge ... ok
+test virtual_dataset::tests::test_evaluate_filter_has_annotations ... ok
+test virtual_dataset::tests::test_evaluate_chain_filter_then_sample ... ok
+test virtual_dataset::tests::test_evaluate_sample ... ok
+test virtual_dataset::tests::test_list ... ok
+test virtual_dataset::tests::test_evaluate_source ... ok
+test virtual_dataset::tests::test_preview_limits_results ... ok
+
+test result: ok. 66 passed; 0 failed; 0 ignored; 0 measured; 136 filtered out; finished in 0.04s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+
+running 1 test
+test test_merge_two_datasets_pipeline ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s

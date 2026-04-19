@@ -1,0 +1,47 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running unittests src/lib.rs (target/debug/deps/dman_server-5d2cf44a48f20854)
+
+running 29 tests
+test api::tests::api_list_datasets_empty ... ok
+test api::tests::api_get_virtual_dataset_not_found ... ok
+test label_studio::tests::test_api_error_handling ... ok
+test label_studio::tests::test_build_image_url ... ok
+test api::tests::api_list_samples_dataset_not_found ... ok
+test label_studio::tests::test_export_dataset_not_found ... ok
+test label_studio::tests::test_extract_filename_from_url ... ok
+test api::tests::api_get_dataset_not_found ... ok
+test label_studio::tests::test_export_task_format ... ok
+test label_studio::tests::test_ls_task_deserialization ... ok
+test label_studio::tests::test_parse_ls_result_rectanglelabels ... ok
+test label_studio::tests::test_parse_ls_result_skips_non_rectanglelabels ... ok
+test label_studio::tests::test_task_without_annotations ... ok
+test label_studio::tests::test_import_duplicate_dataset ... ok
+test tests::test_cors_header_present ... ok
+test tests::test_health_endpoint ... ok
+test label_studio::tests::test_import_task_conversion ... ok
+test tests::test_missing_image_404 ... ok
+test tests::test_image_served_with_correct_content_type ... ok
+test api::tests::api_get_asset_not_found ... ok
+test tests::test_spa_fallback ... ok
+test api::tests::api_list_datasets_with_data ... ok
+test api::tests::api_list_virtual_datasets_empty ... ok
+test api::tests::api_get_virtual_dataset_found ... ok
+test api::tests::api_list_datasets_pagination ... ok
+test api::tests::api_list_categories ... ok
+test api::tests::api_dataset_stats ... ok
+test api::tests::api_list_samples_no_filter ... ok
+test api::tests::api_list_samples_category_filter ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running unittests src/main.rs (target/debug/deps/dman_server-6d0a9e41663b2817)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests dman_server
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

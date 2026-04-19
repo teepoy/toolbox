@@ -1,0 +1,187 @@
+
+running 37 tests
+test plugin_info::tests::test_plugin_info_clone ... ok
+test plugin_info::tests::test_plugin_info_fields ... ok
+test plugins::format::tests::test_python_format_exporter_name ... ok
+test plugins::format::tests::test_python_format_importer_name ... ok
+test sdk::builder::tests::builder_rollback_on_duplicate_name ... ok
+test embeddings::tests::embeddings_compute_embeddings_processes_all_images ... FAILED
+test sdk::builder::tests::builder_registers_explicit_category ... ok
+test sdk::builder::tests::add_sample_and_asset_separate_methods ... ok
+test sdk::builder::tests::builder_creates_dataset_and_inserts_samples ... ok
+test sdk::builder::tests::builder_empty_dataset_works ... ok
+test plugins::format::tests::test_detect_returns_false_when_no_detect_fn ... ok
+test plugins::format::tests::test_detect_calls_plugin_detect_fn ... ok
+test sdk::builder::tests::builder_multiple_samples_and_annotations ... ok
+test sdk::builder::tests::updater_add_sample_internal_returns_positive_id ... ok
+test sdk::builder::tests::builder_bbox_uses_width_height_keys ... ok
+test plugins::format::tests::test_import_inserts_samples_and_annotations ... ok
+test sdk::builder::tests::updater_new_with_db_errors_for_missing_dataset ... ok
+test tests::discover_empty_dir ... ok
+test sdk::builder::tests::updater_apply_adds_annotation_with_category ... ok
+test tests::discover_finds_plugin_with_double_quotes ... ok
+test sdk::builder::tests::updater_apply_removes_sample_and_adds_new ... ok
+test tests::discover_finds_plugin_with_single_quotes ... ok
+test sdk::loader::tests::asset_rows_have_correct_type ... ok
+test tests::discover_skips_non_py_files ... ok
+test tests::parse_plugin_marker_extracts_fields ... ok
+test tests::discover_skips_py_without_marker ... ok
+test tests::parse_plugin_marker_returns_none_without_marker ... ok
+test sdk::loader::tests::get_sample_returns_sample_by_name ... ok
+test sdk::loader::tests::load_dataset_with_invalid_name_returns_value_error ... ok
+test sdk::loader::tests::getitem_uses_samples_and_assets ... ok
+test tests::discover_nonexistent_dir_returns_empty ... ok
+test sdk::loader::tests::annotations_for_sample_returns_correct_results ... ok
+test sdk::loader::tests::images_returns_image_asset_file_paths ... ok
+test sdk::loader::tests::len_is_zero_for_empty_dataset ... ok
+test sdk::loader::tests::non_image_assets_excluded_from_images_method ... ok
+test sdk::loader::tests::load_dataset_with_valid_name_returns_correct_len ... ok
+test tests::discover_multiple_dirs ... ok
+
+failures:
+
+---- embeddings::tests::embeddings_compute_embeddings_processes_all_images stdout ----
+
+thread 'embeddings::tests::embeddings_compute_embeddings_processes_all_images' (1657112) panicked at crates/python/src/embeddings.rs:161:18:
+insert image: SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: images"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    embeddings::tests::embeddings_compute_embeddings_processes_all_images
+
+test result: FAILED. 36 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+warning: field `metadata` is never read
+  --> crates/python/src/sdk/builder.rs:27:13
+   |
+21 |     pub(crate) struct PendingAsset {
+   |                       ------------ field in this struct
+...
+27 |         pub metadata: Option<String>,
+   |             ^^^^^^^^
+   |
+   = note: `PendingAsset` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `metadata` is never read
+  --> crates/python/src/sdk/builder.rs:33:13
+   |
+31 |     pub(crate) struct PendingSample {
+   |                       ------------- field in this struct
+32 |         pub name: String,
+33 |         pub metadata: Option<String>,
+   |             ^^^^^^^^
+   |
+   = note: `PendingSample` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `metadata` is never read
+  --> crates/python/src/sdk/builder.rs:45:13
+   |
+38 |     pub(crate) struct PendingAnnotation {
+   |                       ----------------- field in this struct
+...
+45 |         pub metadata: Option<String>,
+   |             ^^^^^^^^
+   |
+   = note: `PendingAnnotation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `metadata` is never read
+  --> crates/python/src/sdk/builder.rs:58:13
+   |
+56 |         AddSample {
+   |         --------- field in this variant
+57 |             name: String,
+58 |             metadata: Option<String>,
+   |             ^^^^^^^^
+   |
+   = note: `UpdateOp` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `metadata` is never read
+  --> crates/python/src/sdk/builder.rs:66:13
+   |
+60 |         AddAsset {
+   |         -------- field in this variant
+...
+66 |             metadata: Option<String>,
+   |             ^^^^^^^^
+   |
+   = note: `UpdateOp` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `schema_path` is never read
+  --> crates/python/src/sdk/builder.rs:84:20
+   |
+81 |     pub struct DmanDatasetBuilder {
+   |                ------------------ field in this struct
+...
+84 |         pub(crate) schema_path: Option<String>,
+   |                    ^^^^^^^^^^^
+
+warning: field `dataset_name` is never read
+   --> crates/python/src/sdk/builder.rs:493:20
+    |
+490 |     pub struct DmanDatasetUpdater {
+    |                ------------------ field in this struct
+...
+493 |         pub(crate) dataset_name: String,
+    |                    ^^^^^^^^^^^^
+
+warning: `dman-python` (lib) generated 7 warnings
+warning: `dman-python` (lib test) generated 7 warnings (7 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running unittests src/lib.rs (target/debug/deps/dman_python-0c2ff5c883ab2028)
+
+running 37 tests
+test plugin_info::tests::test_plugin_info_clone ... ok
+test plugin_info::tests::test_plugin_info_fields ... ok
+test plugins::format::tests::test_python_format_exporter_name ... ok
+test plugins::format::tests::test_python_format_importer_name ... ok
+test embeddings::tests::embeddings_compute_embeddings_processes_all_images ... FAILED
+test sdk::builder::tests::add_sample_and_asset_separate_methods ... ok
+test sdk::builder::tests::builder_empty_dataset_works ... ok
+test sdk::builder::tests::builder_rollback_on_duplicate_name ... ok
+test sdk::builder::tests::builder_multiple_samples_and_annotations ... ok
+test sdk::builder::tests::builder_bbox_uses_width_height_keys ... ok
+test plugins::format::tests::test_detect_calls_plugin_detect_fn ... ok
+test plugins::format::tests::test_detect_returns_false_when_no_detect_fn ... ok
+test sdk::builder::tests::builder_registers_explicit_category ... ok
+test sdk::builder::tests::builder_creates_dataset_and_inserts_samples ... ok
+test plugins::format::tests::test_import_inserts_samples_and_annotations ... ok
+test sdk::builder::tests::updater_add_sample_internal_returns_positive_id ... ok
+test sdk::builder::tests::updater_new_with_db_errors_for_missing_dataset ... ok
+test sdk::builder::tests::updater_apply_adds_annotation_with_category ... ok
+test tests::discover_empty_dir ... ok
+test sdk::loader::tests::annotations_for_sample_returns_correct_results ... ok
+test tests::discover_finds_plugin_with_double_quotes ... ok
+test sdk::loader::tests::asset_rows_have_correct_type ... ok
+test tests::discover_nonexistent_dir_returns_empty ... ok
+test tests::discover_finds_plugin_with_single_quotes ... ok
+test tests::parse_plugin_marker_extracts_fields ... ok
+test tests::discover_multiple_dirs ... ok
+test tests::discover_skips_non_py_files ... ok
+test tests::discover_skips_py_without_marker ... ok
+test tests::parse_plugin_marker_returns_none_without_marker ... ok
+test sdk::builder::tests::updater_apply_removes_sample_and_adds_new ... ok
+test sdk::loader::tests::images_returns_image_asset_file_paths ... ok
+test sdk::loader::tests::len_is_zero_for_empty_dataset ... ok
+test sdk::loader::tests::load_dataset_with_invalid_name_returns_value_error ... ok
+test sdk::loader::tests::get_sample_returns_sample_by_name ... ok
+test sdk::loader::tests::non_image_assets_excluded_from_images_method ... ok
+test sdk::loader::tests::load_dataset_with_valid_name_returns_correct_len ... ok
+test sdk::loader::tests::getitem_uses_samples_and_assets ... ok
+
+failures:
+
+---- embeddings::tests::embeddings_compute_embeddings_processes_all_images stdout ----
+
+thread 'embeddings::tests::embeddings_compute_embeddings_processes_all_images' (1657227) panicked at crates/python/src/embeddings.rs:161:18:
+insert image: SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: images"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    embeddings::tests::embeddings_compute_embeddings_processes_all_images
+
+test result: FAILED. 36 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p dman-python --lib`

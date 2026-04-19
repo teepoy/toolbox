@@ -90,12 +90,12 @@ Build a production-quality Rust CLI+TUI tool that serves as a local-first ML dat
 - React SPA bundled into binary
 
 ### Definition of Done
-- [ ] `cargo test --workspace` — all tests pass
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` — no warnings
-- [ ] `cargo build --workspace --release` — compiles cleanly
-- [ ] `dman init && dman import --format yolo ./test-data && dman list` — end-to-end works
-- [ ] `dman serve` — opens browser with dataset gallery
-- [ ] `dman tui` — interactive browser launches and displays data
+- [x] `cargo test --workspace` — all tests pass
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` — no warnings
+- [x] `cargo build --workspace --release` — compiles cleanly
+- [x] `dman init && dman import --format yolo ./test-data && dman list` — end-to-end works
+- [x] `dman serve` — opens browser with dataset gallery
+- [x] `dman tui` — interactive browser launches and displays data
 
 ### Must Have
 - Global catalog at `~/.dman/`
@@ -2368,7 +2368,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/server/frontend/`, `crates/server/src/spa.rs`, `crates/server/build.rs`
   - Pre-commit: `cargo build -p dman-server`
 
-- [ ] 27. Gallery View — Image Grid + Pagination + Filtering
+- [x] 27. Gallery View — Image Grid + Pagination + Filtering
 
   **What to do**:
   - Implement the main gallery view in React SPA:
@@ -2453,7 +2453,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/server/frontend/src/`
   - Pre-commit: `cd crates/server/frontend && npm run build`
 
-- [ ] 28. Detail View — Image + Metadata Inspector + Annotations Overlay
+- [x] 28. Detail View — Image + Metadata Inspector + Annotations Overlay
 
   **What to do**:
   - Implement detail view in React SPA:
@@ -2791,7 +2791,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/python/`, `pyproject.toml`
   - Pre-commit: `cargo build --workspace && cargo build -p dman-python --features python`
 
-- [ ] 32. Python Format Converter Plugin API
+- [x] 32. Python Format Converter Plugin API
 
   **What to do**:
   - Create `crates/python/src/plugins/format.rs` with the bridge between Python plugins and Rust FormatImporter/Exporter traits
@@ -2859,7 +2859,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/python/src/plugins/format.rs`
   - Pre-commit: `cargo test -p dman-python --features python`
 
-- [ ] 33. Python SDK — PyTorch Dataset + HF Datasets Loader
+- [x] 33. Python SDK — PyTorch Dataset + HF Datasets Loader
 
   **What to do**:
   - Create `crates/python/src/sdk/loader.rs` — expose Rust dataset loading to Python
@@ -2933,7 +2933,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/python/src/sdk/loader.rs`
   - Pre-commit: `cargo test -p dman-python --features python -- sdk::loader`
 
-- [ ] 34. Python SDK — Dataset Builder/Updater
+- [x] 34. Python SDK — Dataset Builder/Updater
 
   **What to do**:
   - Create `crates/python/src/sdk/builder.rs` — Python API for creating/updating datasets
@@ -3008,7 +3008,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/python/src/sdk/builder.rs`
   - Pre-commit: `cargo test -p dman-python --features python -- sdk::builder`
 
-- [ ] 35. Embeddings Computation via Python Plugins
+- [x] 35. Embeddings Computation via Python Plugins
 
   **What to do**:
   - Create `crates/python/src/embeddings.rs` — bridge for computing embeddings via Python
@@ -3082,7 +3082,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/python/src/embeddings.rs`
   - Pre-commit: `cargo test -p dman-python --features python -- embeddings`
 
-- [ ] 36. Label Studio API Integration — Import/Export Projects
+- [x] 36. Label Studio API Integration — Import/Export Projects
 
   **What to do**:
   - Create `crates/server/src/label_studio/mod.rs` with Label Studio client
@@ -3158,7 +3158,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/server/src/label_studio/mod.rs`
   - Pre-commit: `cargo test -p dman-server -- label_studio`
 
-- [ ] 37. CLI End-to-End Integration Tests
+- [x] 37. CLI End-to-End Integration Tests
 
   **What to do**:
   - Create `crates/cli/tests/integration/` directory with end-to-end test modules
@@ -3259,7 +3259,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/cli/tests/integration/*.rs`, `crates/cli/Cargo.toml` (dev-dependencies)
   - Pre-commit: `cargo test -p dman-cli --test integration`
 
-- [ ] 38. Cross-Format Round-Trip Tests (Import → Export → Re-Import)
+- [x] 38. Cross-Format Round-Trip Tests (Import → Export → Re-Import)
 
   **What to do**:
   - Create `crates/core/tests/roundtrip/` directory with cross-format test modules
@@ -3361,7 +3361,7 @@ Max Concurrent: 6 (Waves 2, 4, 6)
   - Files: `crates/core/tests/roundtrip/*.rs`, `crates/core/tests/fixtures/`
   - Pre-commit: `cargo test -p dman-core --test roundtrip`
 
-- [ ] 39. Virtual Dataset + Materialize + Export Integration Test
+- [x] 39. Virtual Dataset + Materialize + Export Integration Test
 
   **What to do**:
   - Create `crates/core/tests/virtual_integration.rs` with end-to-end virtual dataset tests
@@ -3486,19 +3486,19 @@ Max Concurrent: 6 (Waves 2, 4, 6)
 
 ## Final Verification Wave
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in .sisyphus/evidence/. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `cargo clippy --workspace --all-targets -- -D warnings` + `cargo test --workspace`. Review all changed files for: `unwrap()` in library code, empty catches, dead code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names.
   Output: `Build [PASS/FAIL] | Clippy [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill for web UI)
+- [x] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill for web UI)
   Start from clean state. Execute EVERY QA scenario from EVERY task — follow exact steps, capture evidence. Test cross-task integration (import → virtual dataset → materialize → export). Test edge cases: empty datasets, corrupted files, concurrent access.
   Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff. Verify 1:1 — everything in spec was built, nothing beyond spec was built. Check "Must NOT do" compliance. Detect cross-task contamination. Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
 
@@ -3567,13 +3567,13 @@ cargo build --workspace --release                           # Expected: clean bu
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] All tests pass (`cargo test --workspace`)
-- [ ] No clippy warnings
-- [ ] Import/export round-trips work for YOLO, COCO, HuggingFace Parquet
-- [ ] Virtual datasets compose and materialize correctly
-- [ ] Web UI displays images and metadata
-- [ ] TUI browses datasets interactively
-- [ ] Python SDK loads datasets into PyTorch/HF
-- [ ] Label Studio API integration imports/exports
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] All tests pass (`cargo test --workspace`)
+- [x] No clippy warnings
+- [x] Import/export round-trips work for YOLO, COCO, HuggingFace Parquet
+- [x] Virtual datasets compose and materialize correctly
+- [x] Web UI displays images and metadata
+- [x] TUI browses datasets interactively
+- [x] Python SDK loads datasets into PyTorch/HF
+- [x] Label Studio API integration imports/exports

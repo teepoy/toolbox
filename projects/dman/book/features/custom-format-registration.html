@@ -1,0 +1,689 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Custom format registration - dman</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-7e651e21.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-ed67a0a7.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">dman</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/example/dman" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="custom-format-registration"><a class="header" href="#custom-format-registration">Custom format registration</a></h1>
+<p><code>dman</code> ships four built-in formats (<code>yolo</code>, <code>coco</code>, <code>huggingface</code>, <code>label-studio</code>) and a
+registry-backed plugin system that lets you teach the CLI new dataset formats in plain
+Python—no Rust required.</p>
+<hr>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Registering a custom format means placing a single <code>.py</code> file in <code>~/.dman/plugins/</code> (or
+<code>$DMAN_HOME/plugins/</code>).  After that, the format ID you choose becomes available to
+<code>dman import</code> and <code>dman export</code> as if it were a built-in:</p>
+<pre><code>dman import /path/to/dataset --format parquet-multi-image --name my_dataset
+dman export my_dataset /out/dir --format parquet-multi-image
+</code></pre>
+<p>Plugins can also expose an optional <code>detect()</code> function so <code>dman import</code> can identify the
+format automatically without <code>--format</code>.</p>
+<hr>
+<h2 id="canonical-format-ids"><a class="header" href="#canonical-format-ids">Canonical format IDs</a></h2>
+<p><code>DatasetFormat</code> is a plain string wrapper—not a fixed enum.  Built-in IDs are:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>ID</th><th>Source</th></tr>
+</thead>
+<tbody>
+<tr><td><code>yolo</code></td><td>built-in Rust importer/exporter</td></tr>
+<tr><td><code>coco</code></td><td>built-in Rust importer/exporter</td></tr>
+<tr><td><code>huggingface</code></td><td>built-in Rust importer/exporter</td></tr>
+<tr><td><code>label-studio</code></td><td>built-in Rust importer/exporter</td></tr>
+</tbody>
+</table>
+</div>
+<p>User-defined IDs are arbitrary strings such as <code>parquet-multi-image</code>, <code>my-sensor-log</code>,
+or <code>roboflow-export</code>.  The string you put in <code>name</code> inside the plugin marker <em>is</em> the
+format ID used everywhere in the CLI.</p>
+<hr>
+<h2 id="plugin-file-placement"><a class="header" href="#plugin-file-placement">Plugin file placement</a></h2>
+<pre><code>~/.dman/
+└── plugins/
+    ├── parquet_multi_image.py   # discovered
+    └── sensors/
+        └── lidar_format.py      # also discovered — recursive walk
+</code></pre>
+<ul>
+<li>Default directory: <code>~/.dman/plugins/</code></li>
+<li>Override: set <code>DMAN_HOME</code> to point to a different catalog root; plugins are then
+expected at <code>$DMAN_HOME/plugins/</code></li>
+<li>Discovery walks the directory <strong>recursively</strong> (subdirectories allowed)</li>
+<li>Only files with the <code>.py</code> extension are inspected</li>
+<li>A file is only loaded if it contains the <code>dman_plugin</code> marker (see next section)</li>
+</ul>
+<hr>
+<h2 id="plugin-marker"><a class="header" href="#plugin-marker">Plugin marker</a></h2>
+<p>Every plugin file must declare a top-level <code>dman_plugin</code> dictionary:</p>
+<pre><code class="language-python">dman_plugin = {
+    "name": "parquet-multi-image",
+    "type": "format",
+    "version": "1.0.0",
+}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Required</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>name</code></td><td>yes</td><td>Canonical format ID—used by <code>--format</code> in the CLI</td></tr>
+<tr><td><code>type</code></td><td>yes</td><td>Must be exactly <code>"format"</code></td></tr>
+<tr><td><code>version</code></td><td>yes</td><td>Metadata only; not used for logic</td></tr>
+</tbody>
+</table>
+</div>
+<p>Both single-quoted and double-quoted string values are accepted.</p>
+<hr>
+<h2 id="discovery-lifecycle"><a class="header" href="#discovery-lifecycle">Discovery lifecycle</a></h2>
+<p>Discovery is <strong>text-based</strong> — no Python code is ever executed during this phase.</p>
+<p>When <code>dman</code> starts, <code>PluginManager::discover()</code> walks each <code>.py</code> file in the plugins
+directory and calls <code>parse_plugin_marker()</code>, which:</p>
+<ol>
+<li>Checks whether the file text contains the string <code>dman_plugin</code> (fast substring scan)</li>
+<li>If present, extracts <code>name</code>, <code>type</code>, and <code>version</code> by searching for the quoted key
+names and reading the values after the <code>:</code> separator</li>
+</ol>
+<p>No Python interpreter is invoked, no modules are imported, no side effects occur.
+A file with broken Python syntax is silently accepted during discovery; the syntax error
+will surface at import or export time when the plugin module is actually executed.</p>
+<hr>
+<h2 id="registry-bootstrap-sequence"><a class="header" href="#registry-bootstrap-sequence">Registry bootstrap sequence</a></h2>
+<p>Each time <code>dman</code> runs, the registry is built from scratch:</p>
+<ol>
+<li><strong><code>build_registry()</code> is called</strong> — entry point in the CLI before dispatching any command</li>
+<li><strong><code>FormatRegistry::default_registry()</code></strong> — registers the built-in YOLO, COCO, and
+HuggingFace importers/exporters</li>
+<li><strong><code>Catalog::open()</code></strong> resolves the catalog root; <code>catalog.plugins_path()</code> returns the
+plugins directory</li>
+<li><strong><code>load_python_format_registry(plugin_dirs)</code></strong> — runs <code>PluginManager::discover()</code>;
+for every <code>PluginInfo</code> with <code>plugin_type == "format"</code> it creates one
+<code>PythonFormatImporter</code> and one <code>PythonFormatExporter</code></li>
+<li><strong>Importers and exporters are appended</strong> to the registry (after built-ins)</li>
+<li><strong><code>dman import</code></strong> — if <code>--format</code> is supplied the exact ID is resolved; otherwise
+<code>detect_format(path)</code> calls every registered importer’s <code>detect()</code> in order and
+returns the first one that returns <code>true</code></li>
+<li><strong><code>dman export</code></strong> — always requires explicit <code>--format</code>; resolved by exact format ID</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> If the catalog has not been initialized (<code>dman init</code> not yet run), Python
+plugins are silently skipped and only built-in formats are available.</p>
+</blockquote>
+<hr>
+<h2 id="detect-function-optional"><a class="header" href="#detect-function-optional"><code>detect()</code> function (optional)</a></h2>
+<pre><code class="language-python">def detect(path: str) -&gt; bool:
+    """Return True if path looks like a dataset this plugin can handle."""
+    import os
+    return any(f.endswith(".parquet") for f in os.listdir(path))
+</code></pre>
+<ul>
+<li><strong>Signature:</strong> <code>detect(path: str) -&gt; bool</code></li>
+<li>Called only during auto-detection (when <code>--format</code> is omitted)</li>
+<li>Must be <strong>fast</strong> — it is called for every registered importer</li>
+<li>Must have <strong>no side effects</strong> — do not mutate files, network, or state</li>
+<li>If the function is absent, the importer is never selected automatically; <code>--format</code> is
+required</li>
+</ul>
+<hr>
+<h2 id="import_dataset-function"><a class="header" href="#import_dataset-function"><code>import_dataset()</code> function</a></h2>
+<p><code>import_dataset()</code> is the core of every import plugin.</p>
+<h3 id="signature"><a class="header" href="#signature">Signature</a></h3>
+<pre><code class="language-python">def import_dataset(path: str) -&gt; list:
+    ...
+</code></pre>
+<p><code>path</code> is the string form of the path passed to <code>dman import</code>.  The function must return
+a <strong>list of sample objects</strong> — one element per logical sample in the dataset.</p>
+<blockquote>
+<p><strong>Critical:</strong> <code>import_dataset</code> must return a <code>list</code>, not a <code>dict</code>.  An older dict-based
+API existed during development; it has been removed.  Returning anything other than a
+list will raise <code>PluginError: import_dataset must return a list</code>.</p>
+</blockquote>
+<h3 id="sample-object"><a class="header" href="#sample-object">Sample object</a></h3>
+<p>Each element of the returned list must expose these attributes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attribute</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>name</code></td><td><code>str</code></td><td>Unique name for this sample within the dataset</td></tr>
+<tr><td><code>assets</code></td><td><code>list</code></td><td>List of asset objects (may be empty)</td></tr>
+<tr><td><code>annotations</code></td><td><code>list</code></td><td>Sample-level annotations not tied to a specific asset (may be empty)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="asset-object"><a class="header" href="#asset-object">Asset object</a></h3>
+<p>Each element of the <code>assets</code> list must expose:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attribute</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>asset_type</code></td><td><code>str</code></td><td>One of <code>"image"</code>, <code>"depth"</code>, <code>"pointcloud"</code>, <code>"text"</code>, <code>"audio"</code>, <code>"video"</code>, <code>"mask"</code>, or any custom string</td></tr>
+<tr><td><code>file_name</code></td><td><code>str</code></td><td>Filename unique within the dataset (e.g. <code>"sample001_front.jpg"</code>)</td></tr>
+<tr><td><code>file_path</code></td><td><code>str</code></td><td><strong>Absolute</strong> path to the file on disk</td></tr>
+<tr><td><code>width</code></td><td><code>int | None</code></td><td>Pixel width (or <code>None</code>)</td></tr>
+<tr><td><code>height</code></td><td><code>int | None</code></td><td>Pixel height (or <code>None</code>)</td></tr>
+<tr><td><code>annotations</code></td><td><code>list</code></td><td>Asset-level annotations</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="annotation-object"><a class="header" href="#annotation-object">Annotation object</a></h3>
+<p>Each element of any <code>annotations</code> list must expose:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Attribute</th><th>Type</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>category</code></td><td><code>str</code></td><td>Required; label class name</td></tr>
+<tr><td><code>bbox</code></td><td><code>dict | None</code></td><td>Bounding box (see below) or <code>None</code></td></tr>
+<tr><td><code>segmentation</code></td><td><code>list[list[float]] | None</code></td><td>Polygon segmentation mask or <code>None</code></td></tr>
+<tr><td><code>keypoints</code></td><td><code>list[float] | None</code></td><td>Flat keypoint list or <code>None</code></td></tr>
+<tr><td><code>metadata</code></td><td><code>any | None</code></td><td>Arbitrary JSON-serialisable value or <code>None</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Bounding box format — dict only:</strong></p>
+<pre><code class="language-python">bbox = {"x": 10.0, "y": 20.0, "width": 30.0, "height": 40.0}
+</code></pre>
+<p>All four keys are required floats.  Do <strong>not</strong> use a 4-element list <code>[x, y, w, h]</code> —
+Rust will raise <code>PluginError: 'bbox' must be a dict</code>.</p>
+<h3 id="defining-your-own-classes"><a class="header" href="#defining-your-own-classes">Defining your own classes</a></h3>
+<p>Rust reads all attributes <strong>by name</strong> using Python’s attribute protocol.  You do not need
+to import anything from <code>dman</code>.  Define simple classes directly in your plugin file:</p>
+<pre><code class="language-python">class Annotation:
+    def __init__(self, category, bbox=None, segmentation=None, keypoints=None, metadata=None):
+        self.category = category
+        self.bbox = bbox
+        self.segmentation = segmentation
+        self.keypoints = keypoints
+        self.metadata = metadata
+
+class Asset:
+    def __init__(self, asset_type, file_name, file_path, width=None, height=None, annotations=None):
+        self.asset_type = asset_type
+        self.file_name = file_name
+        self.file_path = file_path
+        self.width = width
+        self.height = height
+        self.annotations = annotations or []
+
+class Sample:
+    def __init__(self, name, assets=None, annotations=None):
+        self.name = name
+        self.assets = assets or []
+        self.annotations = annotations or []
+</code></pre>
+<hr>
+<h2 id="export_dataset-function"><a class="header" href="#export_dataset-function"><code>export_dataset()</code> function</a></h2>
+<pre><code class="language-python">def export_dataset(samples: list, output_path: str) -&gt; None:
+    ...
+</code></pre>
+<p><code>samples</code> is a list of sample objects constructed by the Rust exporter, each with the
+same attribute structure described in the import section above.  <code>output_path</code> is the
+string form of the directory passed to <code>dman export</code>.</p>
+<p>The function must return <code>None</code> (or nothing).  It is responsible for writing all output
+files to <code>output_path</code>.</p>
+<p>Attribute summary for received objects:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Level</th><th>Attributes available</th></tr>
+</thead>
+<tbody>
+<tr><td>Sample</td><td><code>.name</code>, <code>.assets</code>, <code>.annotations</code></td></tr>
+<tr><td>Asset</td><td><code>.asset_type</code>, <code>.file_name</code>, <code>.file_path</code>, <code>.width</code>, <code>.height</code>, <code>.annotations</code></td></tr>
+<tr><td>Annotation</td><td><code>.category</code>, <code>.bbox</code> (dict or <code>None</code>), <code>.segmentation</code>, <code>.keypoints</code>, <code>.metadata</code></td></tr>
+</tbody>
+</table>
+</div>
+<blockquote>
+<p><strong>Note:</strong> <code>.metadata</code> is <code>None</code> in the current implementation for all three levels.</p>
+</blockquote>
+<hr>
+<h2 id="complete-example--parquet-multi-image-format"><a class="header" href="#complete-example--parquet-multi-image-format">Complete example — Parquet multi-image format</a></h2>
+<p>Assume a Parquet dataset where each row contains:</p>
+<ul>
+<li><code>image_front: bytes</code> — JPEG bytes of the front camera</li>
+<li><code>image_back: bytes</code> — JPEG bytes of the back camera</li>
+<li><code>label: str</code> — class label</li>
+<li><code>bbox: list[float]</code> — <code>[x, y, width, height]</code></li>
+</ul>
+<p>Place the following file at <code>~/.dman/plugins/parquet_multi_image.py</code>:</p>
+<pre><code class="language-python">import os
+import pandas as pd
+
+dman_plugin = {
+    "name": "parquet-multi-image",
+    "type": "format",
+    "version": "1.0.0",
+}
+
+
+# ---------------------------------------------------------------------------
+# Data classes (no import from dman needed)
+# ---------------------------------------------------------------------------
+
+class Annotation:
+    def __init__(self, category, bbox=None, segmentation=None, keypoints=None, metadata=None):
+        self.category = category
+        self.bbox = bbox
+        self.segmentation = segmentation
+        self.keypoints = keypoints
+        self.metadata = metadata
+
+
+class Asset:
+    def __init__(self, asset_type, file_name, file_path, width=None, height=None, annotations=None):
+        self.asset_type = asset_type
+        self.file_name = file_name
+        self.file_path = file_path
+        self.width = width
+        self.height = height
+        self.annotations = annotations or []
+
+
+class Sample:
+    def __init__(self, name, assets=None, annotations=None):
+        self.name = name
+        self.assets = assets or []
+        self.annotations = annotations or []
+
+
+# ---------------------------------------------------------------------------
+# Auto-detection
+# ---------------------------------------------------------------------------
+
+def detect(path: str) -&gt; bool:
+    """Return True if the directory contains at least one .parquet file."""
+    try:
+        return any(f.endswith(".parquet") for f in os.listdir(path))
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Import
+# ---------------------------------------------------------------------------
+
+def import_dataset(path: str) -&gt; list:
+    """Read all .parquet files in `path` and return a list of Sample objects."""
+    mat_dir = os.path.join(path, ".materialized-images")
+    os.makedirs(mat_dir, exist_ok=True)
+
+    samples = []
+    for fname in sorted(os.listdir(path)):
+        if not fname.endswith(".parquet"):
+            continue
+        fpath = os.path.join(path, fname)
+        df = pd.read_parquet(fpath)
+
+        for idx, row in df.iterrows():
+            sample_id = f"{fname[:-8]}_row{idx}"
+
+            # Materialise image bytes to disk so dman can store file paths
+            front_name = f"{sample_id}_front.jpg"
+            back_name = f"{sample_id}_back.jpg"
+            front_path = os.path.join(mat_dir, front_name)
+            back_path = os.path.join(mat_dir, back_name)
+
+            with open(front_path, "wb") as f:
+                f.write(bytes(row["image_front"]))
+            with open(back_path, "wb") as f:
+                f.write(bytes(row["image_back"]))
+
+            # Build bbox annotation — dict format required
+            raw_bbox = row["bbox"]  # [x, y, w, h]
+            ann = Annotation(
+                category=str(row["label"]),
+                bbox={"x": float(raw_bbox[0]), "y": float(raw_bbox[1]),
+                      "width": float(raw_bbox[2]), "height": float(raw_bbox[3])},
+            )
+
+            front_asset = Asset(
+                asset_type="image",
+                file_name=front_name,
+                file_path=os.path.abspath(front_path),
+                annotations=[ann],
+            )
+            back_asset = Asset(
+                asset_type="image",
+                file_name=back_name,
+                file_path=os.path.abspath(back_path),
+            )
+
+            samples.append(Sample(name=sample_id, assets=[front_asset, back_asset]))
+
+    return samples
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+def export_dataset(samples: list, output_path: str) -&gt; None:
+    """Write dataset back to Parquet (one file per sample for illustration)."""
+    import shutil
+    os.makedirs(output_path, exist_ok=True)
+
+    rows = []
+    for sample in samples:
+        row = {"sample_name": sample.name}
+        for asset in sample.assets:
+            key = "image_front" if "front" in asset.file_name else "image_back"
+            with open(asset.file_path, "rb") as f:
+                row[key] = f.read()
+            for ann in asset.annotations:
+                row["label"] = ann.category
+                if ann.bbox:
+                    row["bbox"] = [ann.bbox["x"], ann.bbox["y"],
+                                   ann.bbox["width"], ann.bbox["height"]]
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    df.to_parquet(os.path.join(output_path, "export.parquet"), index=False)
+</code></pre>
+<h3 id="directory-layout"><a class="header" href="#directory-layout">Directory layout</a></h3>
+<pre><code>~/.dman/plugins/
+└── parquet_multi_image.py
+
+/data/my_parquet_dataset/
+├── batch_001.parquet
+├── batch_002.parquet
+└── .materialized-images/      ← created by import_dataset()
+    ├── batch_001_row0_front.jpg
+    ├── batch_001_row0_back.jpg
+    └── ...
+</code></pre>
+<h3 id="import-command"><a class="header" href="#import-command">Import command</a></h3>
+<pre><code class="language-bash">dman import /data/my_parquet_dataset --format parquet-multi-image --name my_dataset
+</code></pre>
+<p>Or, because <code>detect()</code> looks for <code>.parquet</code> files, format auto-detection also works:</p>
+<pre><code class="language-bash">dman import /data/my_parquet_dataset --name my_dataset
+</code></pre>
+<hr>
+<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Limitation</th><th>Detail</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Synchronous, file-based only</strong></td><td>Plugins cannot use HTTP, gRPC, subprocesses, or streaming; everything must be accessible as local files</td></tr>
+<tr><td><strong>Discovery is text-based</strong></td><td><code>parse_plugin_marker()</code> is a plain string scan; broken Python syntax is not caught until import/export time</td></tr>
+<tr><td><strong>Auto-detection collision</strong></td><td>If multiple plugins return <code>true</code> from <code>detect()</code> for the same path, the first one registered wins; use <code>--format</code> to resolve ambiguity</td></tr>
+<tr><td><strong>Non-UTF-8 paths rejected</strong></td><td>Plugin paths and dataset paths containing non-UTF-8 bytes will raise <code>PluginError: non-UTF8 plugin path</code></td></tr>
+<tr><td><strong>No persistent state</strong></td><td>The plugin module is executed from scratch on every import/export call; global variables are not preserved between calls</td></tr>
+<tr><td><strong>No dependency isolation</strong></td><td>Plugins share the same Python process; conflicting package versions between plugins are not isolated</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="error-messages"><a class="header" href="#error-messages">Error messages</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Error message</th><th>Cause</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PluginError: import_dataset must return a list</code></td><td><code>import_dataset()</code> returned something other than a <code>list</code> (e.g. a <code>dict</code>)</td></tr>
+<tr><td><code>PluginError: 'bbox' must be a dict</code></td><td>A <code>bbox</code> field was set to a list <code>[x,y,w,h]</code> instead of <code>{"x":…, "y":…, "width":…, "height":…}</code></td></tr>
+<tr><td><code>PluginError: annotation missing 'category'</code></td><td>An annotation object does not have a <code>category</code> attribute</td></tr>
+<tr><td><code>PluginError: PySampleData missing 'name'</code></td><td>A sample object in the returned list does not have a <code>name</code> attribute</td></tr>
+<tr><td><code>PluginError: PySampleData missing 'assets'</code></td><td>A sample object is missing an <code>assets</code> attribute</td></tr>
+<tr><td><code>PluginError: PySampleData missing 'annotations'</code></td><td>A sample object is missing an <code>annotations</code> attribute</td></tr>
+<tr><td><code>PluginError: PyAssetData missing 'asset_type'</code></td><td>An asset object is missing the <code>asset_type</code> attribute</td></tr>
+<tr><td><code>PluginError: PyAssetData missing 'file_name'</code></td><td>An asset object is missing the <code>file_name</code> attribute</td></tr>
+<tr><td><code>PluginError: PyAssetData missing 'file_path'</code></td><td>An asset object is missing the <code>file_path</code> attribute</td></tr>
+<tr><td><code>PluginError: non-UTF8 plugin path</code></td><td>The plugin <code>.py</code> file path contains non-UTF-8 bytes</td></tr>
+<tr><td><code>PluginError: non-UTF8 import path</code></td><td>The path passed to <code>dman import</code> contains non-UTF-8 bytes</td></tr>
+<tr><td><code>PluginError: non-UTF8 output path</code></td><td>The path passed to <code>dman export</code> contains non-UTF-8 bytes</td></tr>
+<tr><td><code>no registered format provider detected for &lt;path&gt;</code></td><td>Auto-detection failed — no plugin’s <code>detect()</code> returned <code>true</code>; use <code>--format</code> explicitly</td></tr>
+<tr><td><code>no importer registered for format '&lt;id&gt;'</code></td><td>The format ID passed to <code>--format</code> does not match any registered plugin or built-in</td></tr>
+</tbody>
+</table>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../features/tui.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../features/tui.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

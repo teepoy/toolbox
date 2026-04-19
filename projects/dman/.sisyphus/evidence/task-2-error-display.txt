@@ -1,0 +1,39 @@
+   Compiling dman-core v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.72s
+     Running unittests src/lib.rs (target/debug/deps/dman_core-d8ec50f408a17fc3)
+
+running 18 tests
+test error::tests::invalid_asset_type_displays_correctly ... ok
+test error::tests::asset_not_found_displays_correctly ... ok
+test error::tests::sample_not_found_displays_correctly ... ok
+test error::tests::test_display_dataset_not_found ... ok
+test error::tests::test_display_import_failed ... ok
+test catalog::tests::open_returns_error_when_not_initialized ... ok
+test error::tests::test_display_schema_validation ... ok
+test error::tests::test_from_io_error ... ok
+test error::tests::test_result_type_alias ... ok
+test error::tests::test_from_serde_json_error ... ok
+test schema::tests::test_dtype_unknown_returns_error ... ok
+test schema::tests::test_schema_from_str_invalid_toml_returns_error ... ok
+test virtual_dataset::transforms::tests::test_add_duplicate_column_returns_error ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_rename_returns_error ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_remove_returns_error ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_cast_returns_error ... ok
+test ops::transforms::tests::sample_invalid_ratio_returns_error ... ok
+test ops::transforms::tests::resize_returns_error_when_no_tool_available ... FAILED
+
+failures:
+
+---- ops::transforms::tests::resize_returns_error_when_no_tool_available stdout ----
+
+thread 'ops::transforms::tests::resize_returns_error_when_no_tool_available' (1471009) panicked at crates/core/src/ops/transforms.rs:540:14:
+insert image: SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: images"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ops::transforms::tests::resize_returns_error_when_no_tool_available
+
+test result: FAILED. 17 passed; 1 failed; 0 ignored; 0 measured; 177 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p dman-core --lib`

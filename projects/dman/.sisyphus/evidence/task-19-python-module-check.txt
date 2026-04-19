@@ -1,0 +1,6 @@
+Task 19 evidence
+
+- Checked `crates/python/src/lib.rs` and `crates/python/src/plugin_info.rs` for remaining `Image`/`PyImgData`/`PyAnnData` references.
+- No matches found in either file.
+- Verified `PySampleData`, `PyAssetData`, and `PyAnnotationData` are registered in `#[pymodule]` via `m.add_class::<...>()?` in `crates/python/src/lib.rs`.
+- `cargo check -p dman-python --features python` completed successfully with warnings only.

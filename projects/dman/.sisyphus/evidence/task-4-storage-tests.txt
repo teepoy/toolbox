@@ -1,0 +1,242 @@
+    Blocking waiting for file lock on artifact directory
+   Compiling dman-core v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/core)
+error[E0432]: unresolved import `crate::types::Image`
+  --> crates/core/src/ops/transforms.rs:11:32
+   |
+11 |     types::{Dataset, FilterOp, Image},
+   |                                ^^^^^ no `Image` in `types`
+   |
+   = help: consider importing this variant instead:
+           crate::types::AssetType::Image
+
+error[E0432]: unresolved import `crate::types::Image`
+ --> crates/core/src/virtual_dataset/transforms.rs:4:13
+  |
+4 |     types::{Image, SchemaOp},
+  |             ^^^^^ no `Image` in `types`
+  |
+  = help: consider importing this variant instead:
+          crate::types::AssetType::Image
+
+error[E0432]: unresolved import `crate::types::Image`
+  --> crates/core/src/virtual_dataset/mod.rs:10:23
+   |
+10 |     types::{FilterOp, Image, VirtualDataset, VirtualDatasetDef},
+   |                       ^^^^^ no `Image` in `types`
+   |
+   = help: consider importing this variant instead:
+           crate::types::AssetType::Image
+
+error[E0432]: unresolved import `types::Image`
+  --> crates/core/src/lib.rs:18:78
+   |
+18 |     Annotation, BBox, Category, Dataset, DatasetFormat, Embedding, FilterOp, Image, Patch,
+   |                                                                              ^^^^^ no `Image` in `types`
+   |
+   = help: consider importing this variant instead:
+           crate::types::AssetType::Image
+
+error[E0432]: unresolved import `crate::types::Image`
+ --> crates/core/src/virtual_dataset/transforms.rs:4:13
+  |
+4 |     types::{Image, SchemaOp},
+  |             ^^^^^ no `Image` in `types`
+  |
+  = help: consider importing this variant instead:
+          crate::types::AssetType::Image
+  = note: unresolved item `crate::ops::transforms::tests::Image` exists but is inaccessible
+
+error[E0432]: unresolved import `crate::types::Image`
+  --> crates/core/src/virtual_dataset/mod.rs:10:23
+   |
+10 |     types::{FilterOp, Image, VirtualDataset, VirtualDatasetDef},
+   |                       ^^^^^ no `Image` in `types`
+   |
+   = help: consider importing this variant instead:
+           crate::types::AssetType::Image
+   = note: unresolved item `crate::virtual_dataset::transforms::tests::Image` exists but is inaccessible
+
+error[E0432]: unresolved import `types::Image`
+  --> crates/core/src/lib.rs:18:78
+   |
+18 |     Annotation, BBox, Category, Dataset, DatasetFormat, Embedding, FilterOp, Image, Patch,
+   |                                                                              ^^^^^ no `Image` in `types`
+   |
+   = help: consider importing this variant instead:
+           crate::types::AssetType::Image
+   = note: unresolved item `crate::virtual_dataset::tests::Image` exists but is inaccessible
+
+error[E0560]: struct `Embedding` has no field named `image_id`
+  --> crates/core/src/embeddings/mod.rs:63:17
+   |
+63 |                 image_id: img_id,
+   |                 ^^^^^^^^ `Embedding` does not have this field
+   |
+   = note: available fields are: `asset_id`
+
+error[E0560]: struct `Embedding` has no field named `image_id`
+   --> crates/core/src/embeddings/mod.rs:104:17
+    |
+104 |                 image_id,
+    |                 ^^^^^^^^ `Embedding` does not have this field
+    |
+    = note: available fields are: `asset_id`
+
+error[E0609]: no field `image_id` on type `Embedding`
+   --> crates/core/src/embeddings/mod.rs:200:24
+    |
+200 |         assert_eq!(emb.image_id, image_id);
+    |                        ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `asset_id`, `model_name`, `vector`, `metadata`
+
+error[E0282]: type annotations needed
+   --> crates/core/src/ops/transforms.rs:129:17
+    |
+129 |                 meta.get(key) == Some(value)
+    |                 ^^^^ cannot infer type
+
+error[E0560]: struct `Patch` has no field named `image_id`
+  --> crates/core/src/patches/mod.rs:76:13
+   |
+76 |             image_id,
+   |             ^^^^^^^^ `Patch` does not have this field
+   |
+   = note: available fields are: `asset_id`
+
+error[E0560]: struct `Patch` has no field named `image_id`
+   --> crates/core/src/patches/mod.rs:207:9
+    |
+207 |         image_id: row.image_id,
+    |         ^^^^^^^^ `Patch` does not have this field
+    |
+    = note: available fields are: `asset_id`
+
+error[E0560]: struct `Prediction` has no field named `image_id`
+  --> crates/core/src/predictions/mod.rs:71:17
+   |
+71 |                 image_id: img_id,
+   |                 ^^^^^^^^ `Prediction` does not have this field
+   |
+   = note: available fields are: `sample_id`, `asset_id`
+
+error[E0560]: struct `Prediction` has no field named `image_id`
+   --> crates/core/src/predictions/mod.rs:103:17
+    |
+103 |                 image_id,
+    |                 ^^^^^^^^ `Prediction` does not have this field
+    |
+    = note: available fields are: `sample_id`, `asset_id`
+
+error[E0560]: struct `Prediction` has no field named `image_id`
+   --> crates/core/src/predictions/mod.rs:140:17
+    |
+140 |                 image_id,
+    |                 ^^^^^^^^ `Prediction` does not have this field
+    |
+    = note: available fields are: `sample_id`, `asset_id`
+
+error[E0609]: no field `image_id` on type `Prediction`
+   --> crates/core/src/predictions/mod.rs:174:33
+    |
+174 |                     .entry(pred.image_id)
+    |                                 ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `sample_id`, `asset_id`, `model_version`, `result`, `score`
+
+error[E0599]: no method named `get_image_path` found for reference `&StorageManager` in the current scope
+   --> crates/core/src/virtual_dataset/materialize.rs:133:25
+    |
+133 |     let dummy = storage.get_image_path(0, "__probe__");
+    |                         ^^^^^^^^^^^^^^ method not found in `&StorageManager`
+
+error[E0282]: type annotations needed
+   --> crates/core/src/virtual_dataset/materialize.rs:136:20
+    |
+136 |         .and_then(|p| p.parent()) // 0/
+    |                    ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+136 |         .and_then(|p: /* Type */| p.parent()) // 0/
+    |                     ++++++++++++
+
+error[E0282]: type annotations needed
+   --> crates/core/src/virtual_dataset/materialize.rs:137:20
+    |
+137 |         .and_then(|p| p.parent()) // base_path/
+    |                    ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+137 |         .and_then(|p: /* Type */| p.parent()) // base_path/
+    |                     ++++++++++++
+
+error[E0282]: type annotations needed
+   --> crates/core/src/virtual_dataset/materialize.rs:138:15
+    |
+138 |         .map(|p| p.to_path_buf())
+    |               ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+138 |         .map(|p: /* Type */| p.to_path_buf())
+    |                ++++++++++++
+
+error[E0609]: no field `image_id` on type `Patch`
+   --> crates/core/src/patches/mod.rs:312:26
+    |
+312 |         assert_eq!(patch.image_id, image_id);
+    |                          ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `asset_id`, `bbox`, `file_path`, `metadata`
+
+error[E0609]: no field `image_id` on type `Patch`
+   --> crates/core/src/patches/mod.rs:356:31
+    |
+356 |         assert_eq!(patches[0].image_id, image_id);
+    |                               ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `asset_id`, `bbox`, `file_path`, `metadata`
+
+error[E0609]: no field `image_id` on type `Patch`
+   --> crates/core/src/patches/mod.rs:377:31
+    |
+377 |         assert_eq!(patches[0].image_id, image_id);
+    |                               ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `asset_id`, `bbox`, `file_path`, `metadata`
+
+error[E0609]: no field `image_id` on type `&Prediction`
+   --> crates/core/src/predictions/mod.rs:245:25
+    |
+245 |         assert_eq!(pred.image_id, image_id);
+    |                         ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `sample_id`, `asset_id`, `model_version`, `result`, `score`
+
+error[E0609]: no field `image_id` on type `&Prediction`
+   --> crates/core/src/predictions/mod.rs:290:58
+    |
+290 |         let image_ids: Vec<i64> = preds.iter().map(|p| p.image_id).collect();
+    |                                                          ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `sample_id`, `asset_id`, `model_version`, `result`, `score`
+
+error[E0282]: type annotations needed
+   --> crates/core/src/virtual_dataset/mod.rs:361:17
+    |
+361 |                 meta.get(key) == Some(value)
+    |                 ^^^^ cannot infer type
+
+error[E0599]: no method named `get_image_path` found for reference `&storage::StorageManager` in the current scope
+   --> crates/core/src/virtual_dataset/materialize.rs:133:25
+    |
+133 |     let dummy = storage.get_image_path(0, "__probe__");
+    |                         ^^^^^^^^^^^^^^ method not found in `&storage::StorageManager`
+
+Some errors have detailed explanations: E0282, E0432, E0560, E0599, E0609.
+For more information about an error, try `rustc --explain E0282`.
+error: could not compile `dman-core` (lib) due to 18 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `dman-core` (lib test) due to 24 previous errors

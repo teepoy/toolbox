@@ -1,0 +1,17 @@
+=== [2026-04-05] BBox key verification ===
+
+Initial grep results:
+- `grep -rn '"w":' crates/python/src/ crates/core/src/ 2>&1`
+  - matched `crates/core/src/formats/yolo/mod.rs`
+  - matched `crates/core/src/formats/coco/mod.rs`
+- `grep -rn '"h":' crates/python/src/ crates/core/src/ 2>&1`
+  - matched `crates/core/src/formats/yolo/mod.rs`
+  - matched `crates/core/src/formats/coco/mod.rs`
+
+Fixes applied:
+- `crates/core/src/formats/coco/mod.rs`: bbox JSON now uses `width` / `height`
+- `crates/core/src/formats/yolo/mod.rs`: bbox JSON read/write now uses `width` / `height`
+
+Post-fix grep results:
+- `grep -rn '"w":' crates/python/src/ crates/core/src/ 2>&1` → no matches
+- `grep -rn '"h":' crates/python/src/ crates/core/src/ 2>&1` → no matches

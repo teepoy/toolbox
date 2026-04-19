@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running tests/multi_asset.rs (target/debug/deps/multi_asset-5604c47ac6d22603)
+
+running 4 tests
+test test_dual_level_annotation ... ok
+test test_multi_asset_sample_creation_and_retrieval ... ok
+test test_duplicate_preserves_hierarchy ... ok
+test test_split_preserves_sample_integrity ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s

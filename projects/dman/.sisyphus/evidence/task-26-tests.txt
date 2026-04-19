@@ -1,0 +1,448 @@
+   Compiling dman-core v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.92s
+     Running unittests src/main.rs (target/debug/deps/dman_cli-6ebc326acd504531)
+
+running 18 tests
+test tui::tests::test_app_initial_state ... ok
+test tui::tests::test_app_navigation_arrow_keys ... ok
+test tui::tests::test_app_navigation ... ok
+test tui::tests::test_app_navigation_empty_datasets ... ok
+test tui::tests::test_app_navigation_no_overflow_down ... ok
+test tui::tests::test_app_navigation_no_overflow_up ... ok
+test tui::tests::test_app_quit ... ok
+test tui::tests::test_app_quit_uppercase ... ok
+test tui::tests::test_backspace_returns_to_list ... ok
+test tui::tests::test_enter_on_empty_list_stays_in_list ... ok
+test tui::tests::test_esc_returns_to_list ... ok
+test tui::tests::test_number_keys_switch_tabs ... ok
+test tui::tests::test_quit_from_detail_view ... ok
+test tui::tests::test_scroll_in_images_tab ... ok
+test tui::tests::test_scroll_only_in_images_tab ... ok
+test tui::tests::test_tab_cycles_tabs ... ok
+test tui::tests::test_ctrl_r_in_detail_clears_detail_data ... ok
+test tui::tests::test_enter_navigates_to_detail ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli.rs (target/debug/deps/cli-c43b6341e9435173)
+
+running 8 tests
+test help_shows_subcommands ... ok
+test help_exits_zero ... ok
+test list_without_init_exits_nonzero ... ok
+test stub_commands_exit_zero ... ok
+test init_exits_zero ... ok
+test init_creates_catalog_dir ... ok
+test list_after_init_shows_empty_message ... ok
+test add_and_list_dataset ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/integration/mod.rs (target/debug/deps/integration-8cfe7da1025912c9)
+
+running 32 tests
+test lifecycle::add_without_init_fails ... ok
+test lifecycle::init_creates_catalog_db ... ok
+test lifecycle::add_nonexistent_path_fails ... ok
+test lifecycle::init_prints_initialized_message ... ok
+test lifecycle::list_empty_catalog_shows_no_datasets_message ... ok
+test lifecycle::init_is_idempotent ... ok
+test lifecycle::inspect_nonexistent_dataset_fails ... ok
+test lifecycle::add_registers_dataset_successfully ... ok
+test lifecycle::inspect_shows_dataset_details ... ok
+test lifecycle::add_with_format_flag_succeeds ... ok
+test lifecycle::list_json_format_is_valid_json ... ok
+test virtual_dataset::materialize_stub_exits_zero ... ok
+test lifecycle::list_shows_added_dataset ... ok
+test lifecycle::remove_nonexistent_dataset_fails ... ok
+test virtual_dataset::materialize_stub_includes_dataset_name_in_message ... ok
+test virtual_dataset::materialize_stub_prints_not_implemented_to_stderr ... ok
+test virtual_dataset::operate_stub_exits_zero ... ok
+test virtual_dataset::operate_stub_prints_not_implemented_to_stderr ... ok
+test virtual_dataset::serve_stub_exits_zero ... ok
+test virtual_dataset::serve_stub_with_custom_port_exits_zero ... ok
+test schema::export_nonexistent_dataset_fails ... ok
+test virtual_dataset::virtual_stub_prints_not_implemented_to_stderr ... ok
+test virtual_dataset::virtual_stub_includes_command_name_in_message ... ok
+test virtual_dataset::virtual_stub_exits_zero ... ok
+test schema::import_requires_detectable_format_or_explicit_format ... ok
+test lifecycle::full_lifecycle_init_add_inspect_remove ... ok
+test lifecycle::remove_abort_via_stdin_n_keeps_dataset ... ok
+test schema::export_writes_yolo_layout ... ok
+test schema::import_with_explicit_format_succeeds ... ok
+test lifecycle::list_table_shows_count ... ok
+test schema::import_detects_and_loads_yolo_fixture ... ok
+test lifecycle::remove_with_yes_flag_removes_dataset ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running unittests src/lib.rs (target/debug/deps/dman_core-d610620569107f04)
+
+running 202 tests
+test catalog::tests::home_path_falls_back_when_no_env_var ... ok
+test catalog::tests::home_path_uses_dman_home_env_var ... ok
+test config::tests::default_config_has_sensible_values ... ok
+test catalog::tests::open_returns_error_when_not_initialized ... ok
+test config::tests::missing_file_returns_default_config ... ok
+test config::tests::partial_toml_merges_with_defaults ... ok
+test config::tests::save_and_load_round_trips ... ok
+test dataset::tests::dataset_get_by_id_not_found ... ok
+test dataset::tests::add_sample_with_single_asset_convenience ... ok
+test dataset::tests::annotations_for_sample_and_asset ... ok
+test dataset::tests::dataset_get_existing ... ok
+test dataset::tests::dataset_get_not_found ... ok
+test dataset::tests::dataset_get_by_id_existing ... ok
+test dataset::tests::dataset_full_crud_cycle ... ok
+test dataset::tests::dataset_inspect_counts ... ok
+test dataset::tests::add_sample_and_asset_and_retrieve ... ok
+test dataset::tests::dataset_list_returns_all ... ok
+test dataset::tests::dataset_inspect_not_found ... ok
+test dataset::tests::dataset_register_rejects_nonexistent_path ... ok
+test dataset::tests::dataset_register_rejects_duplicate ... ok
+test dataset::tests::dataset_list_empty ... ok
+test dataset::tests::dataset_remove_cascade_deletes_samples_and_annotations ... ok
+test dataset::tests::dataset_remove_existing ... ok
+test dataset::tests::dataset_register_creates_record ... ok
+test catalog::tests::path_helpers_return_correct_paths ... ok
+test catalog::tests::open_succeeds_after_init ... ok
+test embeddings::tests::test_embeddings_byte_roundtrip ... ok
+test dataset::tests::dataset_remove_not_found ... ok
+test dataset::tests::dataset_update_metadata_not_found ... ok
+test dataset::tests::dataset_update_metadata ... ok
+test dataset::tests::remove_sample_cascades ... ok
+test catalog::tests::init_creates_catalog_db_and_subdirs ... ok
+test dataset::tests::remove_sample_not_found ... ok
+test db::tests::can_insert_and_read_dataset ... ok
+test error::tests::asset_not_found_displays_correctly ... ok
+test error::tests::invalid_asset_type_displays_correctly ... ok
+test error::tests::sample_not_found_displays_correctly ... ok
+test error::tests::test_display_dataset_not_found ... ok
+test error::tests::test_display_import_failed ... ok
+test error::tests::test_display_schema_validation ... ok
+test error::tests::test_from_io_error ... ok
+test db::tests::open_in_memory_works ... ok
+test error::tests::test_from_serde_json_error ... ok
+test error::tests::test_result_type_alias ... ok
+test db::tests::creates_expected_tables ... ok
+test formats::coco::tests::test_coco_detect_annotations_subdir ... ok
+test formats::coco::tests::test_coco_detects_fixture_dir ... ok
+test formats::coco::tests::test_coco_detect_returns_false_for_empty_dir ... ok
+test formats::coco::tests::test_exporter_name ... ok
+test embeddings::tests::test_embeddings_get_embedding_models ... ok
+test db::tests::wal_pragmas_execute ... ok
+test embeddings::tests::test_embeddings_delete_by_asset ... ok
+test formats::coco::tests::test_importer_name ... ok
+test embeddings::tests::test_embeddings_list_by_dataset_empty ... ok
+test db::tests::creates_expected_indices ... ok
+test embeddings::tests::test_embeddings_list_by_dataset ... ok
+test formats::coco::tests::test_export_correct_counts ... ok
+test embeddings::tests::test_embeddings_store_and_retrieve ... ok
+test formats::huggingface::tests::test_importer_detects_hf_dir ... ok
+test formats::coco::tests::test_import_bbox_stored_correctly ... ok
+test formats::tests::built_in_importer_names_match ... ok
+test formats::huggingface::tests::test_importer_does_not_detect_empty_dir ... ok
+test formats::tests::can_register_custom_importer ... ok
+test formats::tests::default_impl_delegates_to_new ... ok
+test formats::tests::default_registry_has_coco_exporter ... ok
+test formats::tests::default_registry_has_coco_importer ... ok
+test formats::tests::default_registry_has_huggingface_exporter ... ok
+test formats::tests::default_registry_has_huggingface_importer ... ok
+test formats::tests::default_registry_has_yolo_exporter ... ok
+test formats::tests::default_registry_has_yolo_importer ... ok
+test formats::tests::detect_format_returns_none_for_unknown_path ... ok
+test formats::tests::exporter_names_match ... ok
+test formats::tests::new_registry_is_empty ... ok
+test formats::tests::unknown_exporter_returns_none ... ok
+test formats::tests::unknown_importer_returns_none ... ok
+test embeddings::tests::test_embeddings_has_embeddings ... ok
+test embeddings::tests::test_embeddings_get_missing_returns_none ... ok
+test formats::yolo::tests::test_exporter_name ... ok
+test formats::coco::tests::test_import_categories_have_supercategory ... ok
+test formats::coco::tests::test_export_creates_valid_json ... ok
+test formats::coco::tests::test_roundtrip ... ok
+test formats::yolo::tests::test_importer_name ... ok
+test formats::huggingface::tests::test_import_fixture ... ok
+test formats::yolo::tests::test_yolo_detect_returns_false_for_non_yolo_dir ... ok
+test formats::yolo::tests::test_yolo_detects_fixture_dir ... ok
+test formats::huggingface::tests::test_export_roundtrip_row_count ... ok
+test formats::huggingface::tests::test_import_populates_file_name ... ok
+test formats::yolo::tests::test_export_writes_label_files ... ok
+test formats::yolo::tests::test_export_data_yaml_has_correct_classes ... ok
+test formats::yolo::tests::test_import_yolo_fixture ... ok
+test formats::huggingface::tests::test_export_creates_parquet ... ok
+test formats::yolo::tests::test_export_creates_structure ... ok
+test formats::yolo::tests::test_missing_label_file_ok ... ok
+test formats::coco::tests::test_import_coco_fixture ... ok
+test formats::yolo::tests::test_import_yolo_fixture_annotations ... ok
+test ops::tests::duplicate_not_found ... ok
+test ops::tests::duplicate_target_exists ... ok
+test formats::yolo::tests::test_import_yolo_categories ... ok
+test ops::tests::duplicate_basic ... ok
+test ops::tests::split_invalid_ratios ... ok
+test ops::tests::rename_target_already_exists ... ok
+test ops::tests::rename_not_found ... ok
+test ops::tests::merge_output_already_exists ... ok
+test ops::tests::rename_basic ... ok
+test ops::transforms::tests::filter_category_keeps_matching_only ... ok
+test ops::tests::merge_two ... ok
+test ops::transforms::tests::filter_metadata_eq_matches_key_value ... ok
+test ops::transforms::tests::filter_has_annotations_keeps_annotated_only ... ok
+test ops::transforms::tests::sample_invalid_ratio_returns_error ... ok
+test ops::transforms::tests::relabel_renames_categories ... ok
+test ops::transforms::tests::sample_ratio_deterministic ... ok
+test patches::tests::delete_removes_file ... ok
+test patches::tests::get_by_asset_empty_when_none ... ok
+test ops::transforms::tests::sample_ratio_produces_expected_count ... ok
+test patches::tests::extract_output_dimensions ... ok
+test patches::tests::get_by_asset_returns_patches ... ok
+test patches::tests::extract_creates_file ... ok
+test patches::tests::extract_db_record ... ok
+test schema::tests::test_dtype_embedding_vector ... ok
+test schema::tests::test_dtype_from_str_basic ... ok
+test schema::tests::test_dtype_list ... ok
+test schema::tests::test_dtype_serde_roundtrip ... ok
+test schema::tests::test_dtype_unknown_returns_error ... ok
+test predictions::tests::test_delete_by_model ... ok
+test schema::tests::test_schema_from_str_columns_form ... ok
+test schema::tests::test_schema_from_str_fields_form ... ok
+test schema::tests::test_schema_from_str_invalid_toml_returns_error ... ok
+test schema::tests::test_schema_from_str_wrapped_form ... ok
+test schema::tests::test_validate_row_embedding_vector_correct ... ok
+test schema::tests::test_schema_from_toml_fixture ... ok
+test schema::tests::test_validate_row_embedding_vector_wrong_length ... ok
+test schema::tests::test_validate_row_int_rejects_float ... ok
+test predictions::tests::test_get_by_dataset ... ok
+test schema::tests::test_validate_row_missing_required_field ... ok
+test schema::tests::test_validate_row_null_required_field ... ok
+test predictions::tests::test_get_by_model_filters_correctly ... ok
+test schema::tests::test_validate_row_optional_field_absent_is_ok ... ok
+test schema::tests::test_validate_row_type_mismatch_bool ... ok
+test schema::tests::test_validate_row_type_mismatch_string ... ok
+test predictions::tests::test_get_by_sample_empty ... ok
+test predictions::tests::test_store_and_get_by_sample ... ok
+test schema::tests::test_validate_row_valid ... ok
+test storage::tests::test_calculate_hash_deterministic ... ok
+test predictions::tests::test_compare_models ... ok
+test storage::tests::test_delete_asset ... ok
+test storage::tests::test_delete_dataset_storage_nonexistent_is_ok ... ok
+test storage::tests::test_calculate_hash_known_value ... ok
+test storage::tests::test_get_asset_path ... ok
+test storage::tests::test_new_storage_manager ... ok
+test storage::tests::test_delete_dataset_storage ... ok
+test storage::tests::test_store_asset_copy ... ok
+test storage::tests::test_delete_nonexistent_asset_is_ok ... ok
+test types::tests::test_asset_serde_roundtrip ... ok
+test types::tests::test_asset_type_display_and_fromstr ... ok
+test types::tests::test_bbox_serde_roundtrip ... ok
+test types::tests::test_dataset_format_normalizes_aliases ... ok
+test storage::tests::test_store_asset_symlink ... ok
+test types::tests::test_dataset_format_serde ... ok
+test types::tests::test_sample_serde_roundtrip ... ok
+test types::tests::test_serde_roundtrip_all_types ... ok
+test types::tests::test_virtual_dataset_chain ... ok
+test storage::tests::test_store_asset_reference ... ok
+test storage::tests::test_check_integrity_missing_file ... ok
+test patches::tests::get_by_dataset_returns_patches ... ok
+test storage::tests::test_check_integrity_all_present ... ok
+test virtual_dataset::tests::test_circular_ref_detection ... ok
+test virtual_dataset::materialize::tests::test_materialize_schema_transform ... ok
+test virtual_dataset::materialize::tests::test_materialize_simple ... ok
+test virtual_dataset::materialize::tests::test_materialize_filter ... ok
+test virtual_dataset::materialize::tests::test_rollback_on_failure ... ok
+test virtual_dataset::tests::test_definition_serde_roundtrip ... ok
+test ops::tests::split_three_way ... ok
+test predictions::tests::test_store_round_trip_preserves_json ... ok
+test virtual_dataset::tests::test_create_and_get ... ok
+test virtual_dataset::tests::test_delete ... ok
+test virtual_dataset::tests::test_evaluate_merge ... ok
+test ops::tests::split_two_way ... ok
+test virtual_dataset::transforms::tests::test_add_column_samples_with_null_default_does_not_insert ... ok
+test virtual_dataset::transforms::tests::test_add_column_samples_with_non_null_default ... ok
+test virtual_dataset::transforms::tests::test_add_column_schema ... ok
+test virtual_dataset::transforms::tests::test_add_duplicate_column_returns_error ... ok
+test virtual_dataset::tests::test_evaluate_filter_category ... ok
+test virtual_dataset::transforms::tests::test_cast_column_samples_no_change ... ok
+test virtual_dataset::transforms::tests::test_cast_column_schema ... ok
+test virtual_dataset::transforms::tests::test_chain_of_ops_schema ... ok
+test virtual_dataset::tests::test_evaluate_chain_filter_then_sample ... ok
+test virtual_dataset::transforms::tests::test_remove_column_samples ... ok
+test virtual_dataset::tests::test_evaluate_filter_has_annotations ... ok
+test virtual_dataset::transforms::tests::test_rename_column_samples ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_cast_returns_error ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_rename_returns_error ... ok
+test virtual_dataset::transforms::tests::test_remove_column_schema ... ok
+test virtual_dataset::tests::test_evaluate_sample ... ok
+test virtual_dataset::tests::test_delete_not_found ... ok
+test virtual_dataset::tests::test_evaluate_source ... ok
+test virtual_dataset::tests::test_list ... ok
+test virtual_dataset::transforms::tests::test_samples_without_metadata_add_column_with_default ... ok
+test virtual_dataset::tests::test_preview_limits_results ... ok
+test virtual_dataset::transforms::tests::test_schema_not_mutated_by_apply ... ok
+test virtual_dataset::transforms::tests::test_rename_column_schema ... ok
+test virtual_dataset::transforms::tests::test_invalid_column_remove_returns_error ... ok
+test ops::transforms::tests::resize_returns_error_when_no_tool_available ... ok
+
+test result: ok. 202 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/fixtures_test.rs (target/debug/deps/fixtures_test-e73e58b8777918bd)
+
+running 3 tests
+test test_coco_fixture_is_valid_json ... ok
+test test_yolo_fixture_exists ... ok
+test test_schema_fixture_is_valid_toml ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/multi_asset.rs (target/debug/deps/multi_asset-699b450a67f65ec9)
+
+running 4 tests
+test test_dual_level_annotation ... ok
+test test_multi_asset_sample_creation_and_retrieval ... ok
+test test_duplicate_preserves_hierarchy ... ok
+test test_split_preserves_sample_integrity ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/roundtrip/mod.rs (target/debug/deps/roundtrip-ce702634859696f9)
+
+running 18 tests
+test coco_parquet::coco_import_hf_export_file_names_are_non_empty ... ok
+test coco_parquet::coco_import_then_hf_export_creates_parquet ... ok
+test yolo_coco::yolo_import_coco_export_reimport_annotation_count_matches ... ok
+test parquet_yolo::parquet_import_yolo_export_reimport_image_count_matches ... ok
+test parquet_yolo::parquet_import_yolo_export_no_annotations_graceful ... ok
+test coco_parquet::coco_import_hf_export_parquet_has_file_name_column ... ok
+test parquet_yolo::parquet_import_hf_export_roundtrip_row_count ... ok
+test coco_parquet::coco_hf_roundtrip_drop_annotations_gracefully ... ok
+test parquet_yolo::parquet_import_then_yolo_export_creates_structure ... ok
+test coco_parquet::coco_import_hf_export_row_count_matches_image_count ... ok
+test parquet_yolo::parquet_import_yolo_export_data_yaml_is_valid ... ok
+test coco_parquet::coco_import_hf_export_reimport_image_count_matches ... ok
+test yolo_coco::yolo_import_then_coco_export_preserves_annotation_count ... ok
+test yolo_coco::yolo_import_coco_export_reimport_bbox_values_within_epsilon ... ok
+test yolo_coco::yolo_import_then_coco_export_preserves_category_labels ... ok
+test yolo_coco::yolo_import_then_coco_export_preserves_image_count ... ok
+test yolo_coco::yolo_import_coco_export_reimport_image_count_matches ... ok
+test yolo_coco::yolo_import_yolo_export_roundtrip_annotation_count ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/virtual_integration.rs (target/debug/deps/virtual_integration-07bb7751a4cc1d78)
+
+running 12 tests
+test test_delete_nonexistent_vds_returns_error ... ok
+test test_filter_by_metadata_field ... ok
+test test_preview_limits_results ... ok
+test test_vds_list_get_delete ... ok
+test test_full_pipeline_create_evaluate_materialize ... ok
+test test_merge_two_datasets_pipeline ... ok
+test test_materialize_preserves_annotations ... ok
+test test_vds_referencing_deleted_base_evaluates_empty ... ok
+test test_filter_has_annotations ... ok
+test test_filter_by_category_pipeline ... ok
+test test_chain_filter_then_sample ... ok
+test test_schema_transform_rename_via_materialize ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/dman_python-b1c86e254ba6ad5a)
+
+running 37 tests
+test plugin_info::tests::test_plugin_info_clone ... ok
+test plugin_info::tests::test_plugin_info_fields ... ok
+test plugins::format::tests::test_python_format_exporter_name ... ok
+test plugins::format::tests::test_python_format_importer_name ... ok
+test sdk::builder::tests::updater_add_sample_internal_returns_positive_id ... ok
+test sdk::builder::tests::builder_empty_dataset_works ... ok
+test sdk::builder::tests::builder_rollback_on_duplicate_name ... ok
+test sdk::builder::tests::builder_multiple_samples_and_annotations ... ok
+test sdk::builder::tests::add_sample_and_asset_separate_methods ... ok
+test sdk::builder::tests::builder_bbox_uses_width_height_keys ... ok
+test sdk::builder::tests::builder_registers_explicit_category ... ok
+test sdk::builder::tests::updater_apply_adds_annotation_with_category ... ok
+test sdk::builder::tests::updater_new_with_db_errors_for_missing_dataset ... ok
+test sdk::builder::tests::builder_creates_dataset_and_inserts_samples ... ok
+test sdk::builder::tests::updater_apply_removes_sample_and_adds_new ... ok
+test sdk::loader::tests::asset_rows_have_correct_type ... ok
+test sdk::loader::tests::get_sample_returns_sample_by_name ... ok
+test sdk::loader::tests::annotations_for_sample_returns_correct_results ... ok
+test sdk::loader::tests::getitem_uses_samples_and_assets ... ok
+test tests::discover_empty_dir ... ok
+test tests::discover_finds_plugin_with_double_quotes ... ok
+test tests::discover_finds_plugin_with_single_quotes ... ok
+test tests::discover_nonexistent_dir_returns_empty ... ok
+test sdk::loader::tests::len_is_zero_for_empty_dataset ... ok
+test tests::discover_multiple_dirs ... ok
+test tests::discover_skips_py_without_marker ... ok
+test tests::parse_plugin_marker_returns_none_without_marker ... ok
+test sdk::loader::tests::load_dataset_with_valid_name_returns_correct_len ... ok
+test tests::discover_skips_non_py_files ... ok
+test sdk::loader::tests::non_image_assets_excluded_from_images_method ... ok
+test sdk::loader::tests::images_returns_image_asset_file_paths ... ok
+test tests::parse_plugin_marker_extracts_fields ... ok
+test plugins::format::tests::test_detect_calls_plugin_detect_fn ... ok
+test plugins::format::tests::test_detect_returns_false_when_no_detect_fn ... ok
+test sdk::loader::tests::load_dataset_with_invalid_name_returns_value_error ... ok
+test plugins::format::tests::test_import_inserts_samples_and_annotations ... ok
+test embeddings::tests::embeddings_compute_embeddings_processes_all_images ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (target/debug/deps/dman_server-7a88fb612891c621)
+
+running 29 tests
+test api::tests::api_get_virtual_dataset_not_found ... ok
+test api::tests::api_get_dataset_not_found ... ok
+test api::tests::api_list_samples_dataset_not_found ... ok
+test api::tests::api_list_datasets_empty ... ok
+test label_studio::tests::test_build_image_url ... ok
+test label_studio::tests::test_api_error_handling ... ok
+test label_studio::tests::test_extract_filename_from_url ... ok
+test label_studio::tests::test_export_dataset_not_found ... ok
+test label_studio::tests::test_export_task_format ... ok
+test label_studio::tests::test_ls_task_deserialization ... ok
+test label_studio::tests::test_parse_ls_result_rectanglelabels ... ok
+test label_studio::tests::test_parse_ls_result_skips_non_rectanglelabels ... ok
+test label_studio::tests::test_task_without_annotations ... ok
+test label_studio::tests::test_import_duplicate_dataset ... ok
+test tests::test_cors_header_present ... ok
+test tests::test_health_endpoint ... ok
+test label_studio::tests::test_import_task_conversion ... ok
+test tests::test_image_served_with_correct_content_type ... ok
+test tests::test_spa_fallback ... ok
+test tests::test_missing_image_404 ... ok
+test api::tests::api_get_asset_not_found ... ok
+test api::tests::api_get_virtual_dataset_found ... ok
+test api::tests::api_list_categories ... ok
+test api::tests::api_list_datasets_with_data ... ok
+test api::tests::api_list_virtual_datasets_empty ... ok
+test api::tests::api_dataset_stats ... ok
+test api::tests::api_list_datasets_pagination ... ok
+test api::tests::api_list_samples_no_filter ... ok
+test api::tests::api_list_samples_category_filter ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running unittests src/main.rs (target/debug/deps/dman_server-1c64aa241fa72bfd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests dman_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests dman_python
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests dman_server
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

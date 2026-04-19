@@ -1,0 +1,35 @@
+warning: field `schema_path` is never read
+  --> crates/python/src/sdk/builder.rs:57:20
+   |
+54 |     pub struct DmanDatasetBuilder {
+   |                ------------------ field in this struct
+...
+57 |         pub(crate) schema_path: Option<String>,
+   |                    ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `dataset_name` is never read
+   --> crates/python/src/sdk/builder.rs:325:20
+    |
+322 |     pub struct DmanDatasetUpdater {
+    |                ------------------ field in this struct
+...
+325 |         pub(crate) dataset_name: String,
+    |                    ^^^^^^^^^^^^
+
+warning: fields `width` and `height` are never read
+  --> crates/python/src/sdk/loader.rs:25:13
+   |
+21 |     pub(crate) struct ImageRow {
+   |                       -------- fields in this struct
+...
+25 |         pub width: Option<i64>,
+   |             ^^^^^
+26 |         pub height: Option<i64>,
+   |             ^^^^^^
+   |
+   = note: `ImageRow` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: `dman-python` (lib) generated 3 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s

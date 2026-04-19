@@ -1,0 +1,57 @@
+   Compiling dman-core v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/core)
+   Compiling dman-server v0.1.0 (/home/jin/Desktop/toolbox/projects/dman/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.62s
+     Running unittests src/lib.rs (target/debug/deps/dman_server-5d2cf44a48f20854)
+
+running 29 tests
+test api::tests::api_get_virtual_dataset_not_found ... ok
+test api::tests::api_list_samples_dataset_not_found ... ok
+test label_studio::tests::test_api_error_handling ... ok
+test label_studio::tests::test_build_image_url ... ok
+test label_studio::tests::test_export_dataset_not_found ... ok
+test api::tests::api_list_datasets_empty ... ok
+test label_studio::tests::test_extract_filename_from_url ... ok
+test api::tests::api_get_dataset_not_found ... ok
+test label_studio::tests::test_export_task_format ... FAILED
+test label_studio::tests::test_ls_task_deserialization ... ok
+test label_studio::tests::test_parse_ls_result_rectanglelabels ... ok
+test label_studio::tests::test_parse_ls_result_skips_non_rectanglelabels ... ok
+test label_studio::tests::test_task_without_annotations ... ok
+test tests::test_cors_header_present ... ok
+test tests::test_health_endpoint ... ok
+test label_studio::tests::test_import_duplicate_dataset ... ok
+test label_studio::tests::test_import_task_conversion ... FAILED
+test tests::test_image_served_with_correct_content_type ... ok
+test tests::test_spa_fallback ... ok
+test tests::test_missing_image_404 ... ok
+test api::tests::api_get_asset_not_found ... ok
+test api::tests::api_list_datasets_with_data ... ok
+test api::tests::api_get_virtual_dataset_found ... ok
+test api::tests::api_list_categories ... ok
+test api::tests::api_list_virtual_datasets_empty ... ok
+test api::tests::api_list_datasets_pagination ... ok
+test api::tests::api_dataset_stats ... ok
+test api::tests::api_list_samples_no_filter ... ok
+test api::tests::api_list_samples_category_filter ... ok
+
+failures:
+
+---- label_studio::tests::test_export_task_format stdout ----
+
+thread 'label_studio::tests::test_export_task_format' (1623779) panicked at crates/server/src/label_studio/mod.rs:571:14:
+insert img1: SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: images"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- label_studio::tests::test_import_task_conversion stdout ----
+
+thread 'label_studio::tests::test_import_task_conversion' (1623782) panicked at crates/server/src/label_studio/mod.rs:477:70:
+import tasks: Database(SqliteFailure(Error { code: Unknown, extended_code: 1 }, Some("no such table: images")))
+
+
+failures:
+    label_studio::tests::test_export_task_format
+    label_studio::tests::test_import_task_conversion
+
+test result: FAILED. 27 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+error: test failed, to rerun pass `-p dman-server --lib`
