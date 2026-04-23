@@ -1,0 +1,421 @@
+// dman gRPC API — proto3 stub
+//
+// This file is a *reference schema* that mirrors the REST API defined in
+// docs/api/openapi.yaml.  It is intended as a starting point for a future
+// gRPC transport layer and is not compiled into any binary today.
+//
+// Naming conventions:
+//   - Message names:   PascalCase
+//   - Field names:     snake_case
+//   - RPC names:       PascalCase verb + noun (e.g. ListDatasets, GetDataset)
+//   - Package:         dman.v1
+//
+// Streaming RPCs are marked where bulk data transfer justifies it
+// (ListSamples, ListEmbeddings, EvaluateVirtualDataset).
+
+syntax = "proto3";
+
+package dman.v1;
+
+option java_package = "ai.anomaly.dman.v1";
+option java_multiple_files = true;
+option go_package = "github.com/anomalyco/dman/gen/go/dman/v1;dmanv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// ─── Scalar / primitive messages ──────────────────────────────────────────────
+
+message BBox {
+  double x      = 1;
+  double y      = 2;
+  double width  = 3;
+  double height = 4;
+}
+
+// ─── Core entity messages ─────────────────────────────────────────────────────
+
+message Dataset {
+  int64  id          = 1;
+  string name        = 2;
+  string path        = 3;
+  // Canonical format string: "yolo" | "coco" | "huggingface" | "label-studio" |
+  // "builder" | any custom plugin name.
+  string format      = 4;
+
+  optional string schema_path = 5;
+
+  // ISO-8601 timestamp stored as text in SQLite; represented as Timestamp here.
+  google.protobuf.Timestamp created_at = 6;
+  optional google.protobuf.Timestamp updated_at = 7;
+
+  // Arbitrary key-value metadata serialised as a JSON Struct.
+  optional google.protobuf.Struct metadata = 8;
+}
+
+message Sample {
+  int64  id         = 1;
+  int64  dataset_id = 2;
+  string name       = 3;
+  optional google.protobuf.Struct metadata = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// AssetType mirrors the Rust enum.
+enum AssetType {
+  ASSET_TYPE_UNSPECIFIED = 0;
+  ASSET_TYPE_IMAGE       = 1;
+  ASSET_TYPE_DEPTH_MAP   = 2;
+  ASSET_TYPE_POINT_CLOUD = 3;
+  ASSET_TYPE_TEXT        = 4;
+  ASSET_TYPE_AUDIO       = 5;
+  ASSET_TYPE_VIDEO       = 6;
+  ASSET_TYPE_MASK        = 7;
+  // Use with `other_type` string field when none of the above apply.
+  ASSET_TYPE_OTHER       = 8;
+}
+
+message Asset {
+  int64     id         = 1;
+  int64     sample_id  = 2;
+  AssetType asset_type = 3;
+  // Non-empty when asset_type == ASSET_TYPE_OTHER.
+  string    other_type = 4;
+  string    file_name  = 5;
+  string    file_path  = 6;
+  optional uint32 width  = 7;
+  optional uint32 height = 8;
+  optional string hash   = 9;
+  optional google.protobuf.Struct metadata = 10;
+}
+
+message Annotation {
+  int64 id        = 1;
+  int64 sample_id = 2;
+  // asset_id == 0 means sample-scoped annotation.
+  optional int64 asset_id    = 3;
+  optional int64 category_id = 4;
+  optional BBox  bbox        = 5;
+  // Polygon rings: each PolygonRing is a flat [x0,y0,x1,y1,...] array.
+  repeated PolygonRing segmentation = 6;
+  // Flat [x, y, visibility, ...] keypoint array.
+  repeated float keypoints = 7;
+  optional google.protobuf.Struct metadata = 8;
+}
+
+message PolygonRing {
+  repeated double points = 1;
+}
+
+message Category {
+  int64  id              = 1;
+  int64  dataset_id      = 2;
+  string name            = 3;
+  optional string supercategory = 4;
+}
+
+message Embedding {
+  int64  id         = 1;
+  int64  asset_id   = 2;
+  string model_name = 3;
+  // Float32 feature vector.
+  repeated float vector = 4;
+  optional google.protobuf.Struct metadata = 5;
+}
+
+message Prediction {
+  int64  id            = 1;
+  int64  sample_id     = 2;
+  optional int64 asset_id = 3;
+  string model_version = 4;
+  // Arbitrary model output.
+  google.protobuf.Struct result = 5;
+  optional double score = 6;
+}
+
+message Patch {
+  int64 id       = 1;
+  int64 asset_id = 2;
+  // annotation_id == 0 means the source annotation was deleted.
+  optional int64 annotation_id = 3;
+  BBox  bbox     = 4;
+  optional string file_path = 5;
+  optional google.protobuf.Struct metadata = 6;
+}
+
+message DatasetStats {
+  int64 sample_count     = 1;
+  int64 asset_count      = 2;
+  int64 annotation_count = 3;
+  int64 category_count   = 4;
+}
+
+message SampleDetail {
+  Sample             sample      = 1;
+  repeated Asset      assets      = 2;
+  repeated Annotation annotations = 3;
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+
+message PaginationRequest {
+  // 1-based page number.
+  uint32 page     = 1;
+  // Items per page; server clamps to [1, 500].
+  uint32 per_page = 2;
+}
+
+message PaginationResponse {
+  uint32 page     = 1;
+  uint32 per_page = 2;
+  uint32 total    = 3;
+}
+
+// ─── Virtual dataset DSL ─────────────────────────────────────────────────────
+
+enum FilterOp {
+  FILTER_OP_UNSPECIFIED = 0;
+  FILTER_OP_EQ       = 1;
+  FILTER_OP_NE       = 2;
+  FILTER_OP_GT       = 3;
+  FILTER_OP_LT       = 4;
+  FILTER_OP_GTE      = 5;
+  FILTER_OP_LTE      = 6;
+  FILTER_OP_CONTAINS = 7;
+  FILTER_OP_IN       = 8;
+}
+
+message FilterStep {
+  string   column = 1;
+  FilterOp op     = 2;
+  // JSON-encoded comparison value.
+  string   value  = 3;
+}
+
+message MergeStep {
+  // Additional physical dataset IDs to union in.
+  repeated int64 datasets = 1;
+}
+
+message SampleStep {
+  // Fraction of samples to keep; clamped to [0.0, 1.0].
+  double ratio = 1;
+}
+
+message SplitStep {
+  // Map of bucket name → fraction (e.g. {"train": 0.8, "val": 0.1, "test": 0.1}).
+  map<string, double> ratios = 1;
+}
+
+message SchemaTransformStep {
+  repeated SchemaOp transforms = 1;
+}
+
+message SchemaOp {
+  oneof op {
+    RenameColumnOp rename_column = 1;
+    AddColumnOp    add_column    = 2;
+    string         remove_column = 3;  // column name to remove
+    CastColumnOp   cast_column   = 4;
+  }
+}
+
+message RenameColumnOp {
+  string from = 1;
+  string to   = 2;
+}
+
+message AddColumnOp {
+  string name    = 1;
+  string dtype   = 2;
+  // JSON-encoded default value.
+  string default = 3;
+}
+
+message CastColumnOp {
+  string name  = 1;
+  string dtype = 2;
+}
+
+// VirtualDatasetDef is a recursive tree of DSL nodes.
+message VirtualDatasetDef {
+  oneof step {
+    FilterStep          filter           = 1;
+    MergeStep           merge            = 2;
+    SampleStep          sample           = 3;
+    SplitStep           split            = 4;
+    SchemaTransformStep schema_transform = 5;
+    ChainStep           chain            = 6;
+  }
+}
+
+message ChainStep {
+  repeated VirtualDatasetDef steps = 1;
+}
+
+message VirtualDataset {
+  int64  id   = 1;
+  string name = 2;
+  repeated int64 source_datasets = 3;
+  VirtualDatasetDef definition   = 4;
+}
+
+// ─── Request / Response messages ─────────────────────────────────────────────
+
+// Datasets
+message ListDatasetsRequest  { PaginationRequest pagination = 1; }
+message ListDatasetsResponse {
+  repeated Dataset data = 1;
+  PaginationResponse pagination = 2;
+}
+
+message GetDatasetRequest  { string name = 1; }
+message GetDatasetResponse { Dataset data = 1; }
+
+message GetDatasetStatsRequest  { string name = 1; }
+message GetDatasetStatsResponse { DatasetStats data = 1; }
+
+// Samples
+message ListSamplesRequest {
+  string name               = 1;
+  optional string category  = 2;
+  PaginationRequest pagination = 3;
+}
+// Streamed: one SampleDetail per message.
+message ListSamplesResponse { Asset data = 1; }
+
+message GetSampleRequest {
+  string name      = 1;
+  int64  sample_id = 2;
+}
+message GetSampleResponse { SampleDetail data = 1; }
+
+// Categories
+message ListCategoriesRequest  { string name = 1; }
+message ListCategoriesResponse { repeated Category data = 1; }
+
+// Annotations
+message ListAnnotationsForAssetRequest  { int64 asset_id = 1; }
+message ListAnnotationsForAssetResponse { repeated Annotation data = 1; }
+
+// Embeddings
+message ListEmbeddingsRequest {
+  string name                  = 1;
+  optional string model        = 2;
+  PaginationRequest pagination = 3;
+}
+// Streamed: one Embedding per message (vectors can be large).
+message ListEmbeddingsResponse { Embedding data = 1; }
+
+message ListEmbeddingsForAssetRequest {
+  int64 asset_id           = 1;
+  optional string model    = 2;
+}
+message ListEmbeddingsForAssetResponse { repeated Embedding data = 1; }
+
+// Predictions
+message ListPredictionsRequest {
+  string name                       = 1;
+  optional string model_version     = 2;
+  PaginationRequest pagination      = 3;
+}
+message ListPredictionsResponse {
+  repeated Prediction data = 1;
+  PaginationResponse pagination = 2;
+}
+
+// Patches
+message ListPatchesRequest {
+  string name              = 1;
+  PaginationRequest pagination = 2;
+}
+message ListPatchesResponse {
+  repeated Patch data = 1;
+  PaginationResponse pagination = 2;
+}
+
+message ListPatchesForAssetRequest  { int64 asset_id = 1; }
+message ListPatchesForAssetResponse { repeated Patch data = 1; }
+
+// Export
+message ExportDatasetRequest {
+  string name   = 1;
+  // Format identifier: "yolo" | "coco" | "huggingface" | custom.
+  string format = 2;
+}
+// Streamed: chunked zip bytes.
+message ExportDatasetResponse {
+  bytes chunk = 1;
+}
+
+// Virtual datasets
+message ListVirtualDatasetsRequest  { PaginationRequest pagination = 1; }
+message ListVirtualDatasetsResponse {
+  repeated VirtualDataset data = 1;
+  PaginationResponse pagination = 2;
+}
+
+message GetVirtualDatasetRequest  { string name = 1; }
+message GetVirtualDatasetResponse { VirtualDataset data = 1; }
+
+message EvaluateVirtualDatasetRequest  { string name = 1; PaginationRequest pagination = 2; }
+// Streamed: one Sample per message.
+message EvaluateVirtualDatasetResponse { Sample data = 1; }
+
+message EvaluateAdHocRequest {
+  repeated int64 source_datasets = 1;
+  VirtualDatasetDef definition   = 2;
+  optional uint32 limit          = 3;
+}
+message EvaluateAdHocResponse { repeated Sample data = 1; }
+
+// ─── Service definitions ──────────────────────────────────────────────────────
+
+service DmanService {
+  // ── System ──────────────────────────────────────────────────────────────
+
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // ── Datasets ────────────────────────────────────────────────────────────
+
+  rpc ListDatasets(ListDatasetsRequest)       returns (ListDatasetsResponse);
+  rpc GetDataset(GetDatasetRequest)           returns (GetDatasetResponse);
+  rpc GetDatasetStats(GetDatasetStatsRequest) returns (GetDatasetStatsResponse);
+
+  // ── Samples ─────────────────────────────────────────────────────────────
+  // Server-streaming: yields one Asset per message to avoid loading all into memory.
+  rpc ListSamples(ListSamplesRequest) returns (stream ListSamplesResponse);
+  rpc GetSample(GetSampleRequest)     returns (GetSampleResponse);
+
+  // ── Categories / Annotations ─────────────────────────────────────────────
+  rpc ListCategories(ListCategoriesRequest)               returns (ListCategoriesResponse);
+  rpc ListAnnotationsForAsset(ListAnnotationsForAssetRequest) returns (ListAnnotationsForAssetResponse);
+
+  // ── Embeddings ──────────────────────────────────────────────────────────
+  // Server-streaming: embedding vectors can be large; stream to avoid OOM.
+  rpc ListEmbeddings(ListEmbeddingsRequest)               returns (stream ListEmbeddingsResponse);
+  rpc ListEmbeddingsForAsset(ListEmbeddingsForAssetRequest) returns (ListEmbeddingsForAssetResponse);
+
+  // ── Predictions ─────────────────────────────────────────────────────────
+  rpc ListPredictions(ListPredictionsRequest) returns (ListPredictionsResponse);
+
+  // ── Patches ─────────────────────────────────────────────────────────────
+  rpc ListPatches(ListPatchesRequest)               returns (ListPatchesResponse);
+  rpc ListPatchesForAsset(ListPatchesForAssetRequest) returns (ListPatchesForAssetResponse);
+
+  // ── Export ──────────────────────────────────────────────────────────────
+  // Server-streaming: streams zip chunks for large archives.
+  rpc ExportDataset(ExportDatasetRequest) returns (stream ExportDatasetResponse);
+
+  // ── Virtual datasets ─────────────────────────────────────────────────────
+  rpc ListVirtualDatasets(ListVirtualDatasetsRequest)       returns (ListVirtualDatasetsResponse);
+  rpc GetVirtualDataset(GetVirtualDatasetRequest)           returns (GetVirtualDatasetResponse);
+  // Server-streaming: yields one Sample per message.
+  rpc EvaluateVirtualDataset(EvaluateVirtualDatasetRequest) returns (stream EvaluateVirtualDatasetResponse);
+  rpc EvaluateAdHoc(EvaluateAdHocRequest)                   returns (EvaluateAdHocResponse);
+}
+
+// ─── Health ───────────────────────────────────────────────────────────────────
+
+message HealthRequest  {}
+message HealthResponse { string status = 1; }

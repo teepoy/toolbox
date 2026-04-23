@@ -1,0 +1,1250 @@
+openapi: "3.1.0"
+
+info:
+  title: dman API
+  version: "0.1.0"
+  description: |
+    Read-only REST API for querying datasets, samples, annotations, embeddings,
+    predictions, patches, and virtual datasets managed by **dman**.
+
+    External ML services can use this API to:
+    - Pull structured dataset metadata and sample inventories for training pipelines.
+    - Evaluate virtual dataset definitions (Filter / Merge / Sample / Split /
+      SchemaTransform / Chain) without materializing them.
+    - Stream image assets via the media endpoint.
+    - Export full datasets in YOLO, COCO, or HuggingFace formats as a zip archive.
+
+  contact:
+    url: https://github.com/anomalyco/dman
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+tags:
+  - name: datasets
+    description: Physical dataset catalogue
+  - name: samples
+    description: Samples within a dataset
+  - name: annotations
+    description: Annotations attached to samples or assets
+  - name: categories
+    description: Label categories defined per dataset
+  - name: embeddings
+    description: Feature vectors stored per asset
+  - name: predictions
+    description: Model predictions stored per sample
+  - name: patches
+    description: Cropped image patches extracted from assets
+  - name: export
+    description: Bulk dataset export in common ML formats
+  - name: virtual-datasets
+    description: Virtual (non-materialised) dataset views
+  - name: media
+    description: Raw image / asset serving
+  - name: system
+    description: Server health
+
+# ─── Reusable schemas ─────────────────────────────────────────────────────────
+
+components:
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: 1-based page number.
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PerPageParam:
+      name: per_page
+      in: query
+      description: Items per page (max 500).
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 50
+
+    DatasetNameParam:
+      name: name
+      in: path
+      required: true
+      description: Unique dataset name.
+      schema:
+        type: string
+
+    AssetIdParam:
+      name: id
+      in: path
+      required: true
+      description: Asset database ID.
+      schema:
+        type: integer
+        format: int64
+
+    SampleIdParam:
+      name: sample_id
+      in: path
+      required: true
+      description: Sample database ID.
+      schema:
+        type: integer
+        format: int64
+
+  schemas:
+    # ── Primitives ─────────────────────────────────────────────────────────────
+
+    BBox:
+      type: object
+      required: [x, y, width, height]
+      properties:
+        x:
+          type: number
+          format: double
+          description: Left edge (pixels).
+        y:
+          type: number
+          format: double
+          description: Top edge (pixels).
+        width:
+          type: number
+          format: double
+          description: Box width (pixels).
+        height:
+          type: number
+          format: double
+          description: Box height (pixels).
+
+    AssetType:
+      type: string
+      description: |
+        The kind of media stored in an asset.
+        `Other` covers any custom / plugin-defined type.
+      enum:
+        - Image
+        - DepthMap
+        - PointCloud
+        - Text
+        - Audio
+        - Video
+        - Mask
+        - Other
+
+    # ── Core entities ──────────────────────────────────────────────────────────
+
+    Dataset:
+      type: object
+      required: [id, name, path, format, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: Human-readable unique name.
+        path:
+          type: string
+          description: Absolute filesystem path to the dataset root.
+        format:
+          type: string
+          description: |
+            Canonical format identifier.
+            Built-ins: `yolo`, `coco`, `huggingface`, `label-studio`, `builder`.
+            Custom plugin formats are arbitrary strings.
+          examples: [yolo, coco, huggingface]
+        schema_path:
+          type: string
+          nullable: true
+          description: Path to an optional JSON Schema file.
+        created_at:
+          type: string
+          format: date-time
+          description: ISO-8601 creation timestamp (stored as SQLite TEXT).
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          description: Arbitrary user-defined JSON metadata.
+          nullable: true
+
+    Sample:
+      type: object
+      required: [id, dataset_id, name, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        dataset_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        metadata:
+          nullable: true
+          description: Arbitrary JSON metadata attached to this sample.
+        created_at:
+          type: string
+          format: date-time
+
+    Asset:
+      type: object
+      required: [id, sample_id, asset_type, file_name, file_path]
+      properties:
+        id:
+          type: integer
+          format: int64
+        sample_id:
+          type: integer
+          format: int64
+        asset_type:
+          $ref: "#/components/schemas/AssetType"
+        file_name:
+          type: string
+          description: Bare filename (e.g. `frame_001.jpg`).
+        file_path:
+          type: string
+          description: Absolute path on the server's filesystem.
+        width:
+          type: integer
+          nullable: true
+          description: Image width in pixels (null for non-image assets).
+        height:
+          type: integer
+          nullable: true
+        hash:
+          type: string
+          nullable: true
+          description: SHA-256 (or similar) content hash used for ETag generation.
+        metadata:
+          nullable: true
+
+    Annotation:
+      type: object
+      required: [id, sample_id]
+      properties:
+        id:
+          type: integer
+          format: int64
+        sample_id:
+          type: integer
+          format: int64
+        asset_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            When set, this annotation is scoped to a specific asset.
+            When null, it is scoped to the whole sample.
+        category_id:
+          type: integer
+          format: int64
+          nullable: true
+        bbox:
+          $ref: "#/components/schemas/BBox"
+          nullable: true
+        segmentation:
+          type: array
+          nullable: true
+          description: Polygon segmentation as a list of rings; each ring is a flat [x, y, ...] array.
+          items:
+            type: array
+            items:
+              type: number
+              format: double
+        keypoints:
+          type: array
+          nullable: true
+          description: Flat [x, y, visibility, ...] keypoint array.
+          items:
+            type: number
+            format: double
+        metadata:
+          nullable: true
+
+    Category:
+      type: object
+      required: [id, dataset_id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        dataset_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        supercategory:
+          type: string
+          nullable: true
+
+    Embedding:
+      type: object
+      required: [id, asset_id, model_name, vector]
+      properties:
+        id:
+          type: integer
+          format: int64
+        asset_id:
+          type: integer
+          format: int64
+        model_name:
+          type: string
+          description: Identifier of the model that produced this embedding (e.g. `clip-vit-b32`).
+        vector:
+          type: array
+          description: Float32 feature vector.
+          items:
+            type: number
+            format: float
+        metadata:
+          nullable: true
+
+    Prediction:
+      type: object
+      required: [id, sample_id, model_version, result]
+      properties:
+        id:
+          type: integer
+          format: int64
+        sample_id:
+          type: integer
+          format: int64
+        asset_id:
+          type: integer
+          format: int64
+          nullable: true
+        model_version:
+          type: string
+          description: Version string of the model (e.g. `yolov8-v2.1`).
+        result:
+          description: Arbitrary model output JSON.
+        score:
+          type: number
+          format: double
+          nullable: true
+          description: Aggregate confidence score.
+
+    Patch:
+      type: object
+      required: [id, asset_id, bbox]
+      properties:
+        id:
+          type: integer
+          format: int64
+        asset_id:
+          type: integer
+          format: int64
+        annotation_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Source annotation; null when the annotation has been deleted.
+        bbox:
+          $ref: "#/components/schemas/BBox"
+        file_path:
+          type: string
+          nullable: true
+          description: Absolute path to the saved JPEG crop; null when not yet written to disk.
+        metadata:
+          nullable: true
+
+    DatasetStats:
+      type: object
+      required: [sample_count, asset_count, annotation_count, category_count]
+      properties:
+        sample_count:
+          type: integer
+          format: int64
+        asset_count:
+          type: integer
+          format: int64
+        annotation_count:
+          type: integer
+          format: int64
+        category_count:
+          type: integer
+          format: int64
+
+    SampleDetail:
+      type: object
+      required: [sample, assets, annotations]
+      properties:
+        sample:
+          $ref: "#/components/schemas/Sample"
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Asset"
+        annotations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Annotation"
+
+    # ── Virtual dataset DSL ────────────────────────────────────────────────────
+
+    FilterOp:
+      type: string
+      description: Comparison operator used in a Filter step.
+      enum: [Eq, Ne, Gt, Lt, Gte, Lte, Contains, In]
+
+    SchemaOp:
+      description: |
+        A single schema transformation operation.
+        Discriminated by the presence of specific fields.
+      oneOf:
+        - title: RenameColumn
+          type: object
+          required: [RenameColumn]
+          properties:
+            RenameColumn:
+              type: object
+              required: [from, to]
+              properties:
+                from:
+                  type: string
+                to:
+                  type: string
+          additionalProperties: false
+        - title: AddColumn
+          type: object
+          required: [AddColumn]
+          properties:
+            AddColumn:
+              type: object
+              required: [name, dtype, default]
+              properties:
+                name:
+                  type: string
+                dtype:
+                  type: string
+                  description: Type hint (e.g. `string`, `integer`, `boolean`).
+                default:
+                  description: Default value for the new column (null = no-op).
+          additionalProperties: false
+        - title: RemoveColumn
+          type: object
+          required: [RemoveColumn]
+          properties:
+            RemoveColumn:
+              type: string
+              description: Column name to remove.
+          additionalProperties: false
+        - title: CastColumn
+          type: object
+          required: [CastColumn]
+          properties:
+            CastColumn:
+              type: object
+              required: [name, dtype]
+              properties:
+                name:
+                  type: string
+                dtype:
+                  type: string
+          additionalProperties: false
+
+    VirtualDatasetDef:
+      description: |
+        A DSL node describing how to derive a virtual dataset.
+        Serialised as a serde externally-tagged enum; exactly one top-level key
+        names the variant.
+
+        **Filter** — keep only samples matching a predicate.
+        - `column`: `"annotated"` (any annotation present) | `"category"` /
+          `"category_name"` (annotated with category name) |
+          `"metadata.<key>"` (sample metadata field) | any sample struct field.
+        - `op`: one of the `FilterOp` values (ignored for `"category"` columns).
+        - `value`: the comparison operand.
+
+        **Merge** — union the source pool with additional physical dataset IDs.
+        Deduplicates by sample `id`.
+
+        **Sample** — deterministic fractional sub-sample.
+        `ratio` is clamped to `[0.0, 1.0]`.
+
+        **Split** — return only one named bucket of a stratified split.
+        `ratios` must sum to ≤ 1.0; alphabetically-first bucket is used when
+        evaluating a single VDS.
+
+        **SchemaTransform** — apply metadata transformations without changing
+        sample membership. Does not mutate the DB; only affects materialisation.
+
+        **Chain** — compose a sequence of steps, feeding each output to the next.
+      oneOf:
+        - title: Filter
+          type: object
+          required: [Filter]
+          properties:
+            Filter:
+              type: object
+              required: [column, op, value]
+              properties:
+                column:
+                  type: string
+                op:
+                  $ref: "#/components/schemas/FilterOp"
+                value: {}
+          additionalProperties: false
+        - title: Merge
+          type: object
+          required: [Merge]
+          properties:
+            Merge:
+              type: object
+              required: [datasets]
+              properties:
+                datasets:
+                  type: array
+                  items:
+                    type: integer
+                    format: int64
+                  description: Additional physical dataset IDs to union in.
+          additionalProperties: false
+        - title: Sample
+          type: object
+          required: [Sample]
+          properties:
+            Sample:
+              type: object
+              required: [ratio]
+              properties:
+                ratio:
+                  type: number
+                  format: double
+                  minimum: 0.0
+                  maximum: 1.0
+          additionalProperties: false
+        - title: Split
+          type: object
+          required: [Split]
+          properties:
+            Split:
+              type: object
+              required: [ratios]
+              properties:
+                ratios:
+                  type: object
+                  description: |
+                    Map of bucket name → fraction (e.g. `{"train": 0.8, "val": 0.1, "test": 0.1}`).
+                  additionalProperties:
+                    type: number
+                    format: double
+          additionalProperties: false
+        - title: SchemaTransform
+          type: object
+          required: [SchemaTransform]
+          properties:
+            SchemaTransform:
+              type: object
+              required: [transforms]
+              properties:
+                transforms:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/SchemaOp"
+          additionalProperties: false
+        - title: Chain
+          type: object
+          required: [Chain]
+          properties:
+            Chain:
+              type: array
+              description: Ordered list of DSL steps applied sequentially.
+              items:
+                $ref: "#/components/schemas/VirtualDatasetDef"
+          additionalProperties: false
+
+    VirtualDataset:
+      type: object
+      required: [id, name, source_datasets, definition]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        source_datasets:
+          type: array
+          description: IDs of the physical datasets this VDS draws from.
+          items:
+            type: integer
+            format: int64
+        definition:
+          $ref: "#/components/schemas/VirtualDatasetDef"
+
+    EvaluateRequest:
+      type: object
+      required: [source_datasets, definition]
+      properties:
+        source_datasets:
+          type: array
+          description: IDs of physical datasets to evaluate against.
+          items:
+            type: integer
+            format: int64
+        definition:
+          $ref: "#/components/schemas/VirtualDatasetDef"
+        limit:
+          type: integer
+          description: Truncate the result to at most this many samples.
+          nullable: true
+
+    # ── Response envelopes ─────────────────────────────────────────────────────
+
+    PaginationMeta:
+      type: object
+      required: [page, per_page, total]
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+          description: Total number of items across all pages.
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [NOT_FOUND, INTERNAL_ERROR, DB_ERROR, BAD_REQUEST]
+            message:
+              type: string
+
+  responses:
+    NotFound:
+      description: The requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error:
+              code: NOT_FOUND
+              message: "Dataset 'my-ds' not found"
+
+    InternalError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+
+    BadRequest:
+      description: Invalid request parameters or body.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── System ────────────────────────────────────────────────────────────────
+
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      tags: [system]
+      responses:
+        "200":
+          description: Server is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # ── Datasets ──────────────────────────────────────────────────────────────
+
+  /api/datasets:
+    get:
+      operationId: listDatasets
+      summary: List all registered datasets
+      tags: [datasets]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated list of datasets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Dataset"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/datasets/{name}:
+    get:
+      operationId: getDataset
+      summary: Get a dataset by name
+      tags: [datasets]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+      responses:
+        "200":
+          description: Dataset record.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Dataset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/datasets/{name}/stats:
+    get:
+      operationId: getDatasetStats
+      summary: Count samples, assets, annotations, and categories
+      tags: [datasets]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+      responses:
+        "200":
+          description: Aggregated counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DatasetStats"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Samples ───────────────────────────────────────────────────────────────
+
+  /api/datasets/{name}/samples:
+    get:
+      operationId: listSamples
+      summary: List samples (with their assets) in a dataset
+      description: |
+        Returns paginated assets that belong to the dataset.
+        Use `?category=<name>` to restrict to samples annotated with that category.
+      tags: [samples]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+        - name: category
+          in: query
+          description: Filter to assets whose sample has at least one annotation with this category name.
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated asset list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Asset"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/datasets/{name}/samples/{sample_id}:
+    get:
+      operationId: getSample
+      summary: Get a single sample with its assets and annotations
+      tags: [samples]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+        - $ref: "#/components/parameters/SampleIdParam"
+      responses:
+        "200":
+          description: Sample detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SampleDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Categories ────────────────────────────────────────────────────────────
+
+  /api/datasets/{name}/categories:
+    get:
+      operationId: listCategories
+      summary: List all label categories in a dataset
+      tags: [categories]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+      responses:
+        "200":
+          description: Category list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Annotations ───────────────────────────────────────────────────────────
+
+  /api/assets/{id}/annotations:
+    get:
+      operationId: listAnnotationsForAsset
+      summary: List annotations scoped to a specific asset
+      tags: [annotations]
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+      responses:
+        "200":
+          description: Annotation list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Annotation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Embeddings ────────────────────────────────────────────────────────────
+
+  /api/datasets/{name}/embeddings:
+    get:
+      operationId: listEmbeddings
+      summary: List all embeddings in a dataset
+      description: |
+        Returns embeddings for every asset in the dataset.
+        Use `?model=<name>` to filter by embedding model.
+        Note: vectors may be large; use pagination to control page size.
+      tags: [embeddings]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+        - name: model
+          in: query
+          description: Filter to embeddings produced by this model name.
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated embedding list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Embedding"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/assets/{id}/embeddings:
+    get:
+      operationId: listEmbeddingsForAsset
+      summary: List embeddings for a specific asset
+      tags: [embeddings]
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+        - name: model
+          in: query
+          description: Filter to a specific embedding model.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Embedding list for the asset.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Embedding"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Predictions ───────────────────────────────────────────────────────────
+
+  /api/datasets/{name}/predictions:
+    get:
+      operationId: listPredictions
+      summary: List model predictions for a dataset
+      tags: [predictions]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+        - name: model_version
+          in: query
+          description: Filter to a specific model version string.
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated prediction list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Prediction"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Patches ───────────────────────────────────────────────────────────────
+
+  /api/datasets/{name}/patches:
+    get:
+      operationId: listPatches
+      summary: List all patches extracted from a dataset
+      tags: [patches]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated patch list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Patch"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/assets/{id}/patches:
+    get:
+      operationId: listPatchesForAsset
+      summary: List patches extracted from a specific asset
+      tags: [patches]
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+      responses:
+        "200":
+          description: Patch list for the asset.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Patch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Export ────────────────────────────────────────────────────────────────
+
+  /api/datasets/{name}/export:
+    get:
+      operationId: exportDataset
+      summary: Export a dataset as a zip archive
+      description: |
+        Runs a server-side format conversion and streams the result as a
+        `application/zip` attachment.  The zip contains whatever the chosen
+        format exporter writes (e.g. `images/`, `labels/`, `annotations.json`).
+
+        Supported built-in formats: `yolo`, `coco`, `huggingface`.
+        Custom plugin formats that have a registered `FormatExporter` are also
+        accepted.
+
+        The conversion runs synchronously; for large datasets expect latency
+        proportional to dataset size.
+      tags: [export]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+        - name: format
+          in: query
+          required: true
+          description: Target export format identifier.
+          schema:
+            type: string
+            enum: [yolo, coco, huggingface]
+          example: coco
+      responses:
+        "200":
+          description: Zip archive containing the exported dataset.
+          headers:
+            Content-Disposition:
+              description: Suggested download filename.
+              schema:
+                type: string
+                example: 'attachment; filename="my-dataset-coco.zip"'
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Virtual datasets ──────────────────────────────────────────────────────
+
+  /api/virtual-datasets:
+    get:
+      operationId: listVirtualDatasets
+      summary: List all virtual datasets
+      tags: [virtual-datasets]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated virtual dataset list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/VirtualDataset"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+
+  /api/virtual-datasets/{name}:
+    get:
+      operationId: getVirtualDataset
+      summary: Get a virtual dataset definition by name
+      tags: [virtual-datasets]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+      responses:
+        "200":
+          description: Virtual dataset record.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/VirtualDataset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/virtual-datasets/{name}/samples:
+    get:
+      operationId: evaluateVirtualDataset
+      summary: Evaluate a stored virtual dataset and return matching samples
+      description: |
+        Executes the stored DSL definition in-memory and returns the resulting
+        sample list.  No data is written to the database.
+      tags: [virtual-datasets]
+      parameters:
+        - $ref: "#/components/parameters/DatasetNameParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated list of matching samples.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Sample"
+                  pagination:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/virtual-datasets/evaluate:
+    post:
+      operationId: evaluateAdHocVirtualDataset
+      summary: Evaluate an ad-hoc DSL definition without persisting it
+      description: |
+        Accepts a `VirtualDatasetDef` JSON body together with source dataset IDs
+        and evaluates the definition in-memory.  Nothing is written to the
+        database.  Useful for previewing a pipeline before committing.
+      tags: [virtual-datasets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+            examples:
+              filter_annotated:
+                summary: Keep only annotated samples
+                value:
+                  source_datasets: [1]
+                  definition:
+                    Filter:
+                      column: annotated
+                      op: Eq
+                      value: true
+              train_split:
+                summary: 80 % training split then random sub-sample
+                value:
+                  source_datasets: [1, 2]
+                  definition:
+                    Chain:
+                      - Split:
+                          ratios:
+                            train: 0.8
+                            val: 0.1
+                            test: 0.1
+                      - Sample:
+                          ratio: 0.5
+                  limit: 100
+      responses:
+        "200":
+          description: Evaluated sample list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Sample"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Media ─────────────────────────────────────────────────────────────────
+
+  /images/{dataset_id}/{filename}:
+    get:
+      operationId: getImage
+      summary: Serve a raw image asset
+      description: |
+        Serves the image file from `{catalog}/data/{dataset_id}/images/{filename}`.
+        Responses include `ETag` (file hash or mtime-derived) and
+        `Cache-Control: public, max-age=86400` headers to enable downstream
+        caching (CDN / browser / training-framework dataloader cache).
+
+        Conditional `If-None-Match` requests are honoured; the server will
+        return `304 Not Modified` when the ETag matches.
+      tags: [media]
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          description: Numeric dataset ID (as stored in the DB).
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          description: Image filename including extension.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Raw image bytes.
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Content hash for cache validation.
+            Cache-Control:
+              schema:
+                type: string
+              example: "public, max-age=86400"
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: Not Modified (ETag matched).
+        "404":
+          description: Image file not found.

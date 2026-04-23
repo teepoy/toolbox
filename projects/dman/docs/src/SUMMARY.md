@@ -9,3 +9,4 @@
   - [Label Studio](./features/label-studio.md)
   - [TUI](./features/tui.md)
   - [Custom format registration](./features/custom-format-registration.md)
+- [API Reference](./api-reference.md)
